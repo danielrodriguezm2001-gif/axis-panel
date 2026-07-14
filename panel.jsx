@@ -1,4 +1,6 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+/* React se carga como variable global (React, ReactDOM) desde el CDN en
+   index.html — aquí solo tomamos los hooks que necesitamos de ahí. */
+const { useState, useEffect, useMemo, useRef } = React;
 
 /* =====================================================================
    AXIS · PANEL DE SALAS
