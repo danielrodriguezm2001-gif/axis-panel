@@ -1,8 +1,14 @@
 /* Axis · Panel de salas — Integración con Google Calendar
    Widget independiente (no toca panel.js). Lee las sesiones y coaches
    que panel.js ya guarda en localStorage ("axis-sessions", "axis-coaches",
-   "axis-rooms") y crea eventos reales en Google Calendar con los coaches
-   como invitados, para que reciban el email de invitación automáticamente.
+   "axis-rooms") y crea eventos reales en Google Calendar con el coach de
+   cada sesión como invitado, para que reciba el email de invitación.
+
+   Autoenvío: en cuanto panel.js guarda sesiones nuevas (import/sincronización
+   de AimHarder), este script detecta el cambio y envía automáticamente las
+   invitaciones de las sesiones de hoy en adelante que aún no se hayan
+   enviado. No hace falta pulsar nada, salvo la primera vez (hay que conectar
+   la cuenta de Google una vez por navegador).
 */
 (function () {
   var CLIENT_ID = "359527306675-a5vpmnrbq28mv34vjehfi02nmf7o9ve0.apps.googleusercontent.com";
@@ -10,6 +16,8 @@
   var tokenClient = null;
   var accessToken = null;
   var tokenExpiresAt = 0;
+  var sending = false;
+  var writingGuard = false;
 
   function pad(n) { return String(n).padStart(2, "0"); }
   function todayISO() {
@@ -26,8 +34,26 @@
   }
   function writeJSON(key, value) {
     try {
+      writingGuard = true;
       window.localStorage.setItem(key, JSON.stringify(value));
-    } catch (e) {}
+    } catch (e) {
+    } finally {
+      writingGuard = false;
+    }
+  }
+
+  // Detecta cuando panel.js guarda sesiones nuevas en localStorage
+  // (import de AimHarder, sincronización automática, edición manual, etc.)
+  var nativeSetItem = window.localStorage.setItem.bind(window.localStorage);
+  window.localStorage.setItem = function (key, value) {
+    nativeSetItem(key, value);
+    if (key === "axis-sessions" && !writingGuard) scheduleAutoSend();
+  };
+
+  var autoSendTimer = null;
+  function scheduleAutoSend() {
+    if (autoSendTimer) clearTimeout(autoSendTimer);
+    autoSendTimer = setTimeout(autoSendPending, 800);
   }
 
   function el(tag, attrs, children) {
@@ -43,7 +69,7 @@
     return node;
   }
 
-  var box, statusLine, connectBtn, dateInput, sendBtn, logLine;
+  var box, statusLine, connectBtn, logLine;
 
   function buildWidget() {
     box = el("div", {
@@ -56,24 +82,17 @@
     });
     var header = el("div", {
       style: { background: "#12211B", color: "#fff", padding: "10px 14px", fontWeight: "700", fontSize: "14px" },
-      text: "Google Calendar · invitaciones"
+      text: "Google Calendar · autoenvío"
     });
     var body = el("div", { style: { padding: "12px 14px", display: "grid", gap: "8px" } });
 
-    statusLine = el("div", { style: { fontSize: "12px", color: "#5A6B63" }, text: "Desconectado de Google Calendar." });
+    statusLine = el("div", { style: { fontSize: "12px", color: "#5A6B63" }, text: "Conectando con Google Calendar…" });
     connectBtn = el("button", {
       text: "Conectar con Google Calendar",
       style: btnStyle(true),
-      onclick: connect
+      onclick: function () { connect(true); }
     });
-    dateInput = el("input", { type: "date", value: todayISO(), style: inputStyle() });
-    sendBtn = el("button", {
-      text: "Enviar invitaciones de este día",
-      style: btnStyle(false),
-      disabled: "true",
-      onclick: sendForSelectedDate
-    });
-    sendBtn.disabled = true;
+    connectBtn.style.display = "none";
     logLine = el("div", { style: { fontSize: "12px", color: "#5A6B63", whiteSpace: "pre-wrap" } });
 
     var toggle = el("button", {
@@ -85,8 +104,6 @@
 
     body.appendChild(statusLine);
     body.appendChild(connectBtn);
-    body.appendChild(dateInput);
-    body.appendChild(sendBtn);
     body.appendChild(logLine);
 
     toggle.addEventListener("click", function () {
@@ -98,9 +115,6 @@
     box.appendChild(header);
     box.appendChild(body);
     document.body.appendChild(box);
-
-    dateInput.addEventListener("change", updateSendButtonLabel);
-    updateSendButtonLabel();
   }
 
   function btnStyle(primary) {
@@ -108,20 +122,6 @@
       border: "none", borderRadius: "8px", padding: "9px 12px", font: "600 13px Barlow, sans-serif",
       cursor: "pointer", background: primary ? "#12211B" : "#E5F4E9", color: primary ? "#fff" : "#12211B"
     };
-  }
-  function inputStyle() {
-    return { border: "1px solid #C9D2CD", borderRadius: "6px", padding: "7px 9px", fontSize: "13px" };
-  }
-
-  function pendingForDate(dateISO) {
-    var sessions = readJSON("axis-sessions", []);
-    return sessions.filter(function (s) { return s.date === dateISO && !s.gcalSent; });
-  }
-
-  function updateSendButtonLabel() {
-    var n = pendingForDate(dateInput.value).length;
-    sendBtn.textContent = "Enviar invitaciones de este día (" + n + ")";
-    sendBtn.disabled = !accessToken || n === 0;
   }
 
   function ensureTokenClient() {
@@ -131,25 +131,26 @@
       scope: SCOPES,
       callback: function (resp) {
         if (resp.error) {
-          statusLine.textContent = "Error al conectar: " + resp.error;
+          accessToken = null;
+          if (statusLine) {
+            statusLine.textContent = 'Desconectado. Pulsa "Conectar" una vez para activar el autoenvío en este navegador.';
+          }
+          if (connectBtn) connectBtn.style.display = "inline-block";
           return;
         }
         accessToken = resp.access_token;
         tokenExpiresAt = Date.now() + (resp.expires_in || 3500) * 1000;
-        statusLine.textContent = "Conectado a Google Calendar.";
-        connectBtn.textContent = "Reconectar";
-        updateSendButtonLabel();
+        if (statusLine) statusLine.textContent = "Conectado · autoenvío activo.";
+        if (connectBtn) connectBtn.style.display = "none";
+        autoSendPending();
       }
     });
   }
 
-  function connect() {
+  function connect(interactive) {
     ensureTokenClient();
-    if (!tokenClient) {
-      statusLine.textContent = "Google Identity Services no ha cargado todavía, espera un segundo y vuelve a pulsar.";
-      return;
-    }
-    tokenClient.requestAccessToken({ prompt: accessToken ? "" : "consent" });
+    if (!tokenClient) { setTimeout(function () { connect(interactive); }, 500); return; }
+    tokenClient.requestAccessToken({ prompt: interactive ? "consent" : "" });
   }
 
   function coachOf(id, coaches) { return coaches.find(function (c) { return c.id === id; }); }
@@ -169,22 +170,27 @@
     };
   }
 
-  async function sendForSelectedDate() {
-    if (!accessToken) { statusLine.textContent = "Conéctate primero."; return; }
-    if (Date.now() > tokenExpiresAt - 5000) {
-      statusLine.textContent = "El acceso caducó, reconectando…";
-      connect();
-      return;
-    }
-    var dateISO = dateInput.value;
+  function pendingSessions() {
+    var sessions = readJSON("axis-sessions", []);
+    var today = todayISO();
+    // Solo hoy en adelante: no se invita a sesiones ya pasadas al importar históricos.
+    return sessions.filter(function (s) { return s && s.date && !s.gcalSent && s.date >= today; });
+  }
+
+  async function autoSendPending() {
+    if (sending) return;
+    if (!accessToken) { ensureTokenClient(); if (tokenClient) connect(false); return; }
+    if (Date.now() > tokenExpiresAt - 5000) { connect(false); return; }
+
+    var toSend = pendingSessions();
+    if (!toSend.length) return;
+
+    sending = true;
     var coaches = readJSON("axis-coaches", []);
     var rooms = readJSON("axis-rooms", []);
     var sessions = readJSON("axis-sessions", []);
-    var toSend = sessions.filter(function (s) { return s.date === dateISO && !s.gcalSent; });
-    if (!toSend.length) { logLine.textContent = "No hay sesiones pendientes ese día."; return; }
+    var ok = 0, fail = 0, noEmail = 0, authExpired = false;
 
-    sendBtn.disabled = true;
-    var ok = 0, fail = 0, noEmail = 0;
     for (var i = 0; i < toSend.length; i++) {
       var s = toSend[i];
       var coach = coachOf(s.coachId, coaches);
@@ -202,6 +208,9 @@
         if (res.ok) {
           ok++;
           s.gcalSent = true;
+        } else if (res.status === 401) {
+          fail++;
+          authExpired = true;
         } else {
           fail++;
         }
@@ -209,20 +218,35 @@
         fail++;
       }
     }
+
     writeJSON("axis-sessions", sessions.map(function (s) {
       var upd = toSend.find(function (t) { return t.id === s.id; });
       return upd ? Object.assign({}, s, { gcalSent: upd.gcalSent || s.gcalSent }) : s;
     }));
-    logLine.textContent = "Enviadas " + ok + " invitación(es)" +
-      (fail ? ", " + fail + " con error" : "") +
-      (noEmail ? ". " + noEmail + " sesión(es) sin email de coach (rellénalo en la pestaña Equipo)." : ".") +
-      " Recarga la página para ver las marcas actualizadas en el panel.";
-    updateSendButtonLabel();
+
+    var stamp = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+    if (logLine) {
+      logLine.textContent = "[" + stamp + "] Enviadas " + ok + " invitación(es) automáticamente" +
+        (fail ? ", " + fail + " con error" : "") +
+        (noEmail ? ". " + noEmail + " sesión(es) sin email de coach (pestaña Equipo)." : ".");
+    }
+
+    sending = false;
+    if (authExpired) {
+      accessToken = null;
+      if (statusLine) statusLine.textContent = 'El acceso caducó. Pulsa "Conectar" para reactivar el autoenvío.';
+      if (connectBtn) connectBtn.style.display = "inline-block";
+    }
   }
+
+  // Red de seguridad: por si algún import no pasa por localStorage.setItem
+  // (poco probable, pero así no depende solo del parche).
+  setInterval(autoSendPending, 60000);
 
   function waitForGis(retries) {
     ensureTokenClient();
-    if (tokenClient || retries <= 0) return;
+    if (tokenClient) { connect(false); return; }
+    if (retries <= 0) return;
     setTimeout(function () { waitForGis(retries - 1); }, 500);
   }
 
