@@ -7,8 +7,9 @@
    Autoenvío: en cuanto panel.js guarda sesiones nuevas (import/sincronización
    de AimHarder), este script detecta el cambio y envía automáticamente las
    invitaciones de las sesiones de hoy en adelante que aún no se hayan
-   enviado. No hace falta pulsar nada, salvo la primera vez (hay que conectar
-   la cuenta de Google una vez por navegador).
+   enviado. La única acción manual necesaria es pulsar "Conectar" una vez
+   por navegador/dispositivo (Google exige ese primer permiso explícito);
+   a partir de ahí, mientras la pestaña siga abierta, todo se envía solo.
 */
 (function () {
   var CLIENT_ID = "359527306675-a5vpmnrbq28mv34vjehfi02nmf7o9ve0.apps.googleusercontent.com";
@@ -17,6 +18,7 @@
   var accessToken = null;
   var tokenExpiresAt = 0;
   var sending = false;
+  var connecting = false;
   var writingGuard = false;
 
   function pad(n) { return String(n).padStart(2, "0"); }
@@ -86,13 +88,12 @@
     });
     var body = el("div", { style: { padding: "12px 14px", display: "grid", gap: "8px" } });
 
-    statusLine = el("div", { style: { fontSize: "12px", color: "#5A6B63" }, text: "Conectando con Google Calendar…" });
+    statusLine = el("div", { style: { fontSize: "12px", color: "#5A6B63" }, text: "Desconectado. Pulsa \"Conectar\" una vez para activar el autoenvío." });
     connectBtn = el("button", {
       text: "Conectar con Google Calendar",
       style: btnStyle(true),
       onclick: function () { connect(true); }
     });
-    connectBtn.style.display = "none";
     logLine = el("div", { style: { fontSize: "12px", color: "#5A6B63", whiteSpace: "pre-wrap" } });
 
     var toggle = el("button", {
@@ -130,17 +131,16 @@
       client_id: CLIENT_ID,
       scope: SCOPES,
       callback: function (resp) {
+        connecting = false;
         if (resp.error) {
           accessToken = null;
-          if (statusLine) {
-            statusLine.textContent = 'Desconectado. Pulsa "Conectar" una vez para activar el autoenvío en este navegador.';
-          }
+          if (statusLine) statusLine.textContent = 'Desconectado. Pulsa "Conectar" una vez para activar el autoenvío.';
           if (connectBtn) connectBtn.style.display = "inline-block";
           return;
         }
         accessToken = resp.access_token;
         tokenExpiresAt = Date.now() + (resp.expires_in || 3500) * 1000;
-        if (statusLine) statusLine.textContent = "Conectado · autoenvío activo.";
+        if (statusLine) statusLine.textContent = "Conectado · autoenvío activo mientras esta pestaña siga abierta.";
         if (connectBtn) connectBtn.style.display = "none";
         autoSendPending();
       }
@@ -150,7 +150,21 @@
   function connect(interactive) {
     ensureTokenClient();
     if (!tokenClient) { setTimeout(function () { connect(interactive); }, 500); return; }
+    if (connecting) return;
+    connecting = true;
+    if (interactive && statusLine) statusLine.textContent = "Conectando…";
     tokenClient.requestAccessToken({ prompt: interactive ? "consent" : "" });
+    // Si la reconexión silenciosa no responde (p.ej. el navegador bloquea el
+    // popup por no venir de un clic), no dejamos el estado colgado.
+    setTimeout(function () {
+      if (connecting) {
+        connecting = false;
+        if (!accessToken && statusLine) {
+          statusLine.textContent = 'Desconectado. Pulsa "Conectar" una vez para activar el autoenvío.';
+          if (connectBtn) connectBtn.style.display = "inline-block";
+        }
+      }
+    }, 6000);
   }
 
   function coachOf(id, coaches) { return coaches.find(function (c) { return c.id === id; }); }
@@ -179,11 +193,18 @@
 
   async function autoSendPending() {
     if (sending) return;
-    if (!accessToken) { ensureTokenClient(); if (tokenClient) connect(false); return; }
-    if (Date.now() > tokenExpiresAt - 5000) { connect(false); return; }
-
     var toSend = pendingSessions();
     if (!toSend.length) return;
+
+    if (!accessToken) {
+      // No forzamos conexión sola (el navegador bloquearía el popup sin clic
+      // del usuario). Avisamos para que pulse "Conectar" una vez.
+      if (statusLine && connectBtn && connectBtn.style.display !== "none") {
+        statusLine.textContent = toSend.length + " sesión(es) nueva(s) esperando. Pulsa \"Conectar\" para enviarlas.";
+      }
+      return;
+    }
+    if (Date.now() > tokenExpiresAt - 5000) { connect(false); return; }
 
     sending = true;
     var coaches = readJSON("axis-coaches", []);
@@ -239,14 +260,19 @@
     }
   }
 
-  // Red de seguridad: por si algún import no pasa por localStorage.setItem
-  // (poco probable, pero así no depende solo del parche).
+  // Renueva el token en silencio antes de que caduque (solo si ya estábamos
+  // conectados en esta pestaña); si falla, se pide reconectar con un clic.
+  setInterval(function () {
+    if (accessToken && Date.now() > tokenExpiresAt - 5 * 60 * 1000) connect(false);
+  }, 60000);
+
+  // Red de seguridad: revisa cada minuto por si algún import no disparó
+  // el aviso al vuelo.
   setInterval(autoSendPending, 60000);
 
   function waitForGis(retries) {
     ensureTokenClient();
-    if (tokenClient) { connect(false); return; }
-    if (retries <= 0) return;
+    if (tokenClient || retries <= 0) return;
     setTimeout(function () { waitForGis(retries - 1); }, 500);
   }
 
