@@ -527,8 +527,11 @@ function AxisPanel() {
       // Aviso si sync_axis.py lleva horas sin subir datos (p. ej. la tarea
       // programada de Windows dej\xF3 de ejecutarse). Preferimos la marca que
       // escribe el propio script; si no existe, la fecha del Gist.
-      const stamp = Date.parse(json.generated_at || json.updated_at || raw.updated_at || "");
-      const STALE_HOURS = 6;
+      // GitHub no cambia la fecha del Gist si el contenido es id\xE9ntico, as\xED
+      // que sin marca propia del script damos m\xE1s margen para no dar falsas alarmas.
+      const ownStamp = json.generated_at || json.updated_at;
+      const stamp = Date.parse(ownStamp || raw.updated_at || "");
+      const STALE_HOURS = ownStamp ? 6 : 24;
       if (stamp && Date.now() - stamp > STALE_HOURS * 36e5) {
         const horas = Math.floor((Date.now() - stamp) / 36e5);
         setAutoSyncState({

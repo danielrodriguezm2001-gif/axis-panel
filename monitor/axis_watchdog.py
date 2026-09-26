@@ -3,11 +3,12 @@
 
 Comprueba periódicamente que sync_axis.py sigue funcionando y, si no, avisa
 y (opcionalmente) lo relanza. Pensado para ejecutarse cada hora desde el
-Programador de tareas de Windows (ver instalar_vigilante.ps1).
+Programador de tareas de Windows (lo instala instalar.ps1).
 
 Qué comprueba:
   1. Frescura de los datos: descarga la misma URL que usa el panel (el Gist)
-     y mira cuándo se actualizó por última vez. Si supera --max-horas, falla.
+     y mira cuándo se actualizó por última vez. Si supera --max-horas-datos,
+     falla.
   2. Contenido: que haya días con sesiones y que haya pagos (si llegan 0,
      casi siempre es que la descarga de AimHarder falló dentro del script).
   3. (Solo Windows, si se indica --tarea) Estado de la tarea programada de
@@ -15,7 +16,8 @@ Qué comprueba:
      y que se haya ejecutado recientemente.
 
 Si algo falla:
-  - con --relanzar y --script, ejecuta sync_axis.py y vuelve a comprobar;
+  - con --relanzar, relanza la tarea programada de sync_axis.py (o, sin
+    --tarea, ejecuta --script) y vuelve a comprobar;
   - avisa con una notificación de Windows y, si se configura, al móvil vía
     ntfy.sh (--ntfy-topic). Solo avisa al pasar de OK a fallo, cada
     --repetir-aviso horas mientras siga fallando, y cuando se recupera.
@@ -198,6 +200,32 @@ def check_task(task_name, max_hours):
 
 # ---------------------------------------------------------------- acciones
 
+def relaunch_task(task_name, log_path, timeout_min):
+    """Relanza la tarea programada existente (misma configuración que siempre)."""
+    if not IS_WINDOWS:
+        return False
+    name = task_name.replace("'", "''")
+    ps = (
+        "Enable-ScheduledTask -TaskName '{n}' -ErrorAction SilentlyContinue | Out-Null; "
+        "Start-ScheduledTask -TaskName '{n}' -ErrorAction Stop; "
+        "$fin = (Get-Date).AddMinutes({m}); Start-Sleep 5; "
+        "while ((Get-ScheduledTask -TaskName '{n}').State -eq 'Running' -and (Get-Date) -lt $fin) {{ Start-Sleep 10 }}; "
+        "(Get-ScheduledTaskInfo -TaskName '{n}').LastTaskResult"
+    ).format(n=name, m=timeout_min)
+    log("Relanzando la tarea '%s'..." % task_name, log_path)
+    try:
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
+            capture_output=True, text=True, timeout=timeout_min * 60 + 120,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        log("No se pudo relanzar la tarea: %s" % e, log_path)
+        return False
+    log("La tarea terminó con resultado: %s %s" % (out.stdout.strip(), out.stderr.strip()[:300]), log_path)
+    return out.returncode == 0 and out.stdout.strip() == "0"
+
+
 def relaunch(script, python_exe, log_path, timeout_min):
     cmd = [python_exe or sys.executable, script]
     log("Relanzando: %s" % " ".join(cmd), log_path)
@@ -253,7 +281,7 @@ def notify_ntfy(topic, title, text, priority, log_path):
 
 def load_json(path, default):
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(path, encoding="utf-8-sig") as f:  # tolera el BOM de PowerShell
             return json.load(f)
     except (OSError, ValueError):
         return default
@@ -273,11 +301,14 @@ def main(argv=None):
     p = argparse.ArgumentParser(description="Vigila que sync_axis.py siga actualizando los datos del panel.")
     p.add_argument("--config", default=DEFAULT_CONFIG, help="JSON con las mismas opciones (por defecto monitor/config.json)")
     p.add_argument("--url", help="URL de sincronización (la misma que pegas en el panel)")
-    p.add_argument("--max-horas", type=float, help="antigüedad máxima de los datos antes de avisar (def. 3)")
+    p.add_argument("--max-horas", type=float, help="horas máximas sin que se ejecute la tarea (def. 3)")
+    p.add_argument("--max-horas-datos", type=float,
+                   help="antigüedad máxima de los datos del Gist (def. = --max-horas, o 24 si se vigila la tarea: "
+                        "el Gist no cambia de fecha si los datos no cambian)")
     p.add_argument("--tarea", help="nombre de la tarea programada de Windows que ejecuta sync_axis.py")
-    p.add_argument("--script", help="ruta a sync_axis.py (necesaria para --relanzar)")
+    p.add_argument("--script", help="ruta a sync_axis.py (para --relanzar si no se indica --tarea)")
     p.add_argument("--python", help="python.exe con el que relanzar sync_axis.py")
-    p.add_argument("--relanzar", action="store_true", default=None, help="si falla, ejecuta sync_axis.py y vuelve a comprobar")
+    p.add_argument("--relanzar", action="store_true", default=None, help="si falla, relanza la tarea (o sync_axis.py) y vuelve a comprobar")
     p.add_argument("--ntfy-topic", help="tema de ntfy.sh para recibir el aviso en el móvil")
     p.add_argument("--repetir-aviso", type=float, help="horas entre avisos mientras siga fallando (def. 6)")
     p.add_argument("--sin-notificacion", action="store_true", help="no mostrar avisos (solo log y código de salida)")
@@ -298,12 +329,14 @@ def main(argv=None):
     if not url:
         log("Falta la URL de sincronización (--url, config.json o AXIS_SYNC_URL).", log_path)
         return 2
-    if do_relaunch and not (script and os.path.isfile(script)):
-        log("--relanzar necesita --script con la ruta a sync_axis.py (no encontrado: %s)." % script, log_path)
+    if do_relaunch and not task and not (script and os.path.isfile(script)):
+        log("--relanzar necesita --tarea o --script con la ruta a sync_axis.py (no encontrado: %s)." % script, log_path)
         return 2
+    data_hours = opt("max_horas_datos")
+    data_hours = float(data_hours) if data_hours is not None else (24.0 if task else max_hours)
 
     def run_checks():
-        probs, _ = check_data(url, max_hours)
+        probs, _ = check_data(url, data_hours)
         if task:
             probs += check_task(task, max_hours)
         return probs
@@ -313,7 +346,10 @@ def main(argv=None):
     if problems and do_relaunch:
         for pr in problems:
             log("FALLO: " + pr, log_path)
-        relaunch(script, opt("python"), log_path, timeout_min=15)
+        if task and IS_WINDOWS:
+            relaunch_task(task, log_path, timeout_min=15)
+        else:
+            relaunch(script, opt("python"), log_path, timeout_min=15)
         relaunched = True
         problems = run_checks()
 
