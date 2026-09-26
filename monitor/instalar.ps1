@@ -24,8 +24,10 @@ try {
   # ---------------------------------------------------------------- 1
   Paso "Descargando el vigilante en $Destino"
   New-Item -ItemType Directory -Force -Path $Destino | Out-Null
-  $watchdog = Join-Path $Destino "axis_watchdog.py"
-  Invoke-WebRequest -UseBasicParsing -Uri "$Base/axis_watchdog.py" -OutFile $watchdog
+  $watchdog = Join-Path $Destino "axis_watchdog.ps1"
+  Invoke-WebRequest -UseBasicParsing -Uri "$Base/axis_watchdog.ps1" -OutFile $watchdog
+  # Quitar la marca de "descargado de Internet" para que Windows lo deje ejecutar.
+  Unblock-File -Path $watchdog -ErrorAction SilentlyContinue
   Ok "Descargado."
 
   # ---------------------------------------------------------------- 2
@@ -87,23 +89,6 @@ try {
     while (-not $url) { $url = (Read-Host "    Pega la URL aquí y pulsa Enter").Trim() }
   }
 
-  # ---------------------------------------------------------------- python
-  $python = $null
-  if ($accionSync -and $accionSync.Execute -match 'python(w)?\.exe') {
-    $exe = $accionSync.Execute.Trim('"')
-    if (Test-Path $exe) { $python = $exe }
-  }
-  if (-not $python) {
-    foreach ($n in "python.exe", "py.exe") {
-      $c = Get-Command $n -ErrorAction SilentlyContinue
-      if ($c -and $c.Source -notmatch "WindowsApps") { $python = $c.Source; break }
-    }
-  }
-  if (-not $python) { throw "No encuentro Python en este ordenador. Es el mismo que usa sync_axis.py; si no lo tienes, instálalo desde python.org y vuelve a pegar la línea." }
-  # pythonw.exe = sin ventana negra cada hora
-  $pythonw = Join-Path (Split-Path $python) "pythonw.exe"
-  if (-not (Test-Path $pythonw)) { $pythonw = $python }
-
   # ---------------------------------------------------------------- 4
   Paso "Avisos en el móvil (opcional)"
   $ntfy = ""
@@ -129,9 +114,7 @@ try {
     url = $url
     max_horas = 3
     tarea = $(if ($tareaSync) { $tareaSync.TaskName } else { "" })
-    script = $(if ($scriptSync) { $scriptSync } else { "" })
-    python = $python
-    relanzar = [bool]($tareaSync -or $scriptSync)
+    relanzar = [bool]$tareaSync
     ntfy_topic = $ntfy
     repetir_aviso = 6
   }
@@ -140,13 +123,14 @@ try {
 
   # ---------------------------------------------------------------- 5
   Paso "Probando el vigilante ahora mismo"
-  & $python $watchdog --config $configPath --sin-notificacion
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $watchdog -Config $configPath -SinNotificacion
   if ($LASTEXITCODE -eq 0) { Ok "Todo correcto: sync_axis.py está funcionando." }
   elseif ($LASTEXITCODE -eq 1) { Aviso "Ha detectado un problema (arriba ves cuál). Lo dejo instalado igualmente para que te avise y lo relance." }
   else { throw "La configuración no es válida (mira el mensaje de arriba)." }
 
   Paso "Programando la comprobación cada hora"
-  $accion = New-ScheduledTaskAction -Execute $pythonw -Argument "`"$watchdog`" --config `"$configPath`"" -WorkingDirectory $Destino
+  $accion = New-ScheduledTaskAction -Execute "powershell.exe" -WorkingDirectory $Destino `
+    -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$watchdog`" -Config `"$configPath`""
   $disparador = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) -RepetitionInterval (New-TimeSpan -Hours 1)
   $ajustes = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -MultipleInstances IgnoreNew

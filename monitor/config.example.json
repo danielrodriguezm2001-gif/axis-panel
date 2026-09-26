@@ -1,9 +1,7 @@
 {
   "url": "https://api.github.com/gists/PEGA_AQUI_EL_ID_DEL_GIST",
   "max_horas": 3,
-  "tarea": "sync_axis",
-  "script": "C:\\Users\\TU_USUARIO\\axis\\sync_axis.py",
-  "python": "C:\\Users\\TU_USUARIO\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+  "tarea": "Sincronizar Axis",
   "relanzar": true,
   "ntfy_topic": "",
   "repetir_aviso": 6

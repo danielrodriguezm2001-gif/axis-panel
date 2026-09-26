@@ -6,14 +6,14 @@ Tiene tres capas:
 1. **Aviso en el panel**: si los datos del Gist tienen más de 24 h (6 h si
    `sync_axis.py` escribe `generated_at`), el panel
    muestra una franja roja arriba ("Los datos llevan X h sin actualizarse…").
-2. **Vigilante local (Windows)** — `axis_watchdog.py`, ejecutado cada hora
-   por el Programador de tareas. Comprueba:
+2. **Vigilante local (Windows)** — `axis_watchdog.ps1` (PowerShell, no
+   necesita Python), ejecutado cada hora por el Programador de tareas. Comprueba:
    - que la URL del Gist responde y se ha actualizado en las últimas `max_horas`;
    - que trae sesiones y pagos (0 pagos = fallo de descarga en el script);
    - el estado de la tarea programada de `sync_axis.py` (deshabilitada,
      último resultado con error, o sin ejecutarse hace horas).
 
-   Si algo falla, **relanza `sync_axis.py`** (con `"relanzar": true`), vuelve
+   Si algo falla, **relanza la tarea de `sync_axis.py`** (con `"relanzar": true`), vuelve
    a comprobar y, si sigue mal, muestra una notificación de Windows y
    (opcional) te manda un push al móvil con [ntfy](https://ntfy.sh).
    Solo avisa al empezar a fallar, cada `repetir_aviso` horas mientras siga
@@ -44,7 +44,6 @@ Opciones de `config.json` (las rellena el instalador):
 | `max_horas` | horas máximas sin que se ejecute la tarea de `sync_axis.py` (def. 3) |
 | `max_horas_datos` | antigüedad máxima de los datos del Gist (def. 24 si se vigila la tarea, si no = `max_horas`) |
 | `tarea` | nombre de la tarea programada que ejecuta `sync_axis.py`; al relanzar se ejecuta esa misma tarea |
-| `script` / `python` | ruta a `sync_axis.py` y a Python, para relanzarlo si no hay tarea |
 | `relanzar` | `true` para relanzar automáticamente si falla |
 | `ntfy_topic` | tema de la app ntfy para recibir el aviso en el móvil |
 | `repetir_aviso` | horas entre avisos repetidos mientras siga fallando (def. 6) |
