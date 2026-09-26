@@ -524,6 +524,19 @@ function AxisPanel() {
         }
       }
 
+      // Aviso si sync_axis.py lleva horas sin subir datos (p. ej. la tarea
+      // programada de Windows dej\xF3 de ejecutarse). Preferimos la marca que
+      // escribe el propio script; si no existe, la fecha del Gist.
+      const stamp = Date.parse(json.generated_at || json.updated_at || raw.updated_at || "");
+      const STALE_HOURS = 6;
+      if (stamp && Date.now() - stamp > STALE_HOURS * 36e5) {
+        const horas = Math.floor((Date.now() - stamp) / 36e5);
+        setAutoSyncState({
+          status: "error",
+          msg: `Los datos llevan ${horas} h sin actualizarse (\xFAltima subida: ${new Date(stamp).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}). Parece que sync_axis.py ha dejado de ejecutarse: revisa la tarea programada en el ordenador.`
+        });
+        return;
+      }
       setAutoSyncState({
         status: "done",
         msg: `\xDAltima sincronizaci\xF3n: ${(/* @__PURE__ */ new Date()).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })} \xB7 ${allRecords.length} sesi\xF3n(es)${nPagos ? ` \xB7 ${nPagos} pago(s)` : ""} cargados.`
@@ -843,7 +856,7 @@ function AxisPanel() {
     var _a;
     return ((_a = coachOf(s)) == null ? void 0 : _a.name) || s.coachRaw || "\xBFCoach?";
   };
-  return /* @__PURE__ */ React.createElement("div", { className: "axis-root" }, /* @__PURE__ */ React.createElement("style", null, css), /* @__PURE__ */ React.createElement("header", { style: { background: "#12211B", color: "#fff", padding: "18px 22px 0" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("h1", { className: "axis-display", style: { margin: 0, fontSize: 30, fontWeight: 700, textTransform: "uppercase" } }, "Axis \xB7 Panel de salas"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#9DB4A9" } }, "Horarios por sala \xB7 exporta a Google Calendar / Outlook")), /* @__PURE__ */ React.createElement("nav", { style: { marginTop: 10, display: "flex" } }, [["horario", "Horario"], ["sesiones", "Sesiones e import"], ["stats", "Resumen mensual"], ["equipo", "Equipo y salas"]].map(([id, label]) => /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement("div", { className: "axis-root" }, /* @__PURE__ */ React.createElement("style", null, css), autoSyncState.status === "error" && tab !== "sesiones" && /* @__PURE__ */ React.createElement("div", { role: "alert", style: { background: "#9B1C1C", color: "#fff", padding: "8px 22px", fontSize: 13, fontWeight: 600 } }, "\u26A0\uFE0F ", autoSyncState.msg), /* @__PURE__ */ React.createElement("header", { style: { background: "#12211B", color: "#fff", padding: "18px 22px 0" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("h1", { className: "axis-display", style: { margin: 0, fontSize: 30, fontWeight: 700, textTransform: "uppercase" } }, "Axis \xB7 Panel de salas"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#9DB4A9" } }, "Horarios por sala \xB7 exporta a Google Calendar / Outlook")), /* @__PURE__ */ React.createElement("nav", { style: { marginTop: 10, display: "flex" } }, [["horario", "Horario"], ["sesiones", "Sesiones e import"], ["stats", "Resumen mensual"], ["equipo", "Equipo y salas"]].map(([id, label]) => /* @__PURE__ */ React.createElement(
     "button",
     {
       key: id,
