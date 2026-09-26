@@ -68,10 +68,16 @@ try {
   Paso "Buscando la URL de sincronización (el Gist)"
   $url = $null
   if ($scriptSync) {
-    $contenido = Get-Content -Raw -Path $scriptSync
-    $m = [regex]::Match($contenido, 'gists/([0-9a-fA-F]{20,})')
-    if (-not $m.Success) { $m = [regex]::Match($contenido, 'gist\.github(?:usercontent)?\.com/[^/\s"'']+/([0-9a-fA-F]{20,})') }
-    if ($m.Success) { $url = "https://api.github.com/gists/$($m.Groups[1].Value)" }
+    try {
+      $contenido = Get-Content -Raw -Path $scriptSync -ErrorAction Stop
+      $m = [regex]::Match($contenido, 'gists/([0-9a-fA-F]{20,})')
+      if (-not $m.Success) { $m = [regex]::Match($contenido, 'gist\.github(?:usercontent)?\.com/[^/\s"'']+/([0-9a-fA-F]{20,})') }
+      if ($m.Success) { $url = "https://api.github.com/gists/$($m.Groups[1].Value)" }
+    } catch {
+      # Suele pasar si sync_axis.py se creó como administrador: no es grave,
+      # solo necesitábamos leerlo para sacar la URL.
+      Aviso "No tengo permiso para leer sync_axis.py; no pasa nada, te pido la URL."
+    }
   }
   if ($url) {
     Ok "Encontrada en sync_axis.py: $url"
