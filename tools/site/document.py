@@ -5,6 +5,7 @@ import json
 from render import (
     BASE_URL,
     SITE_NAME,
+    SITE_BASE_PATH,
     INSTAGRAM_URL,
     PHONE_TEL,
     ADDRESS,
@@ -18,6 +19,20 @@ from render import (
     BLOCK_RENDERERS,
     block_faq,
 )
+
+
+def _con_prefijo(html_doc):
+    """Antepone SITE_BASE_PATH a los enlaces/recursos internos (/es/..., /assets/...).
+
+    Deja intactas las URLs absolutas de dominio completo (schema.org, og:image,
+    canonical), que ya incluyen BASE_URL. Solo afecta a atributos href/src que
+    empiezan literalmente por "/es/" o "/assets/".
+    """
+    if not SITE_BASE_PATH:
+        return html_doc
+    html_doc = html_doc.replace('="/es/', f'="{SITE_BASE_PATH}/es/')
+    html_doc = html_doc.replace('="/assets/', f'="{SITE_BASE_PATH}/assets/')
+    return html_doc
 
 ORGANIZATION_SCHEMA = {
     "@context": "https://schema.org",
@@ -88,7 +103,7 @@ def render_document(page):
 
     og_image = page.get("og_image", "/assets/logos/axis-logo-verde-960.png")
 
-    return f"""<!DOCTYPE html>
+    documento = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
@@ -129,3 +144,4 @@ def render_document(page):
 </body>
 </html>
 """
+    return _con_prefijo(documento)

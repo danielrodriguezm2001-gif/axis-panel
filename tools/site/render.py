@@ -1,7 +1,13 @@
 # -*- coding: utf-8 -*-
 """Motor de plantillas del sitio publico de Axis (sin dependencias externas)."""
 import html
+import os
 import re
+
+# Prefijo para servir el sitio bajo una subcarpeta (p.ej. GitHub Pages de
+# proyecto: https://usuario.github.io/repo/). En el dominio definitivo
+# (raiz, ej. theaxistraining.es) se deja vacio, que es el valor por defecto.
+SITE_BASE_PATH = os.environ.get("AXIS_SITE_BASE_PATH", "").rstrip("/")
 
 SITE_NAME = "Axis Health & Performance"
 BASE_URL = "https://www.theaxistraining.es"
