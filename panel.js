@@ -6,14 +6,16 @@ const DEFAULT_COACHES = [
   { id: "erik", name: "Erik Benavides", role: "Entrenador personal / Fisio", color: "#0D9488", email: "" },
   { id: "marc", name: "Marc Rosa", role: "Entrenador personal", color: "#2563EB", email: "" },
   { id: "daniel", name: "Daniel Rodriguez", role: "Entrenador personal", color: "#D97706", email: "" },
-  { id: "sergio", name: "Sergio Mar\xEDn", role: "Entrenador personal", color: "#9333EA", email: "" }
+  { id: "sergio", name: "Sergio Mar\xEDn", role: "Entrenador personal", color: "#9333EA", email: "" },
+  { id: "marti", name: "Mart\xED", role: "Entrenador personal", color: "#DB2777", email: "" },
+  { id: "marina", name: "Marina", role: "Entrenador personal", color: "#0891B2", email: "" }
 ];
 const DEFAULT_ROOMS = [
   { id: "sala1", name: "Sala 1" },
   { id: "sala2", name: "Sala 2" }
 ];
 const UNKNOWN_COLOR = "#6B7280";
-const PAYMENTS_SEED = [{ "id": "224", "d": "2026-07-13", "c": "marc", "cat": "Pack 8", "amt": 440, "cl": "Alex Ruiz Gutierrez", "st": "fin", "met": "Efectivo" }, { "id": "100", "d": "2026-07-13", "c": "marc", "cat": "Pack 8", "amt": 440, "cl": "Alex Ruiz Gutierrez", "st": "fin", "met": "Efectivo" }, { "id": "263", "d": "2026-07-13", "c": "marc", "cat": "Pack 8", "amt": 440, "cl": "Emma Stanley Carneiro", "st": "fin", "met": "Efectivo" }, { "id": "251", "d": "2026-07-13", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Pablo S\xE1nchez", "st": "fin", "met": "Transferencia" }, { "id": "65", "d": "2026-05-14", "c": "marc", "cat": "Pack 8", "amt": 440, "cl": "Hashim Almadani", "st": "fin", "met": "Transferencia" }, { "id": "117", "d": "2026-06-03", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Mali Fari\xF1a", "st": "fin", "met": "Transferencia" }, { "id": "248", "d": "2026-07-03", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Mali Fari\xF1a", "st": "fin", "met": "Transferencia" }, { "id": "261", "d": "2026-07-06", "c": "marc", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Jan Barbero", "st": "fin", "met": "Transferencia" }, { "id": "260", "d": "2026-07-12", "c": "marc", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Victor Lebron", "st": "fin", "met": "Transferencia" }, { "id": "172", "d": "2026-06-25", "c": "marc", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Arnau Skufca Vieit", "st": "fin", "met": "Transferencia" }, { "id": "178", "d": "2026-06-25", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Arnau Skufca Vieit", "st": "fin", "met": "Transferencia" }, { "id": "96", "d": "2026-06-25", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Arnau Skufca Vieit", "st": "fin", "met": "Transferencia" }, { "id": "47", "d": "2026-05-01", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Arnau Skufca Vieit", "st": "fin", "met": "Transferencia" }, { "id": "243", "d": "2026-05-11", "c": "marc", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Abel Rodriguez", "st": "fin", "met": "Transferencia" }, { "id": "76", "d": "2026-06-25", "c": "marc", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "John Mulero", "st": "fin", "met": "Transferencia" }, { "id": "87", "d": "2026-05-31", "c": "marc", "cat": "Pack 8", "amt": 440, "cl": "Xavi Cabrera", "st": "fin", "met": "Transferencia" }, { "id": "128", "d": "2026-05-24", "c": "marc", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Xavi Cabrera", "st": "fin", "met": "Transferencia" }, { "id": "188", "d": "2026-07-10", "c": "marc", "cat": "Pack 8", "amt": 440, "cl": "Karina Caelles", "st": "fin", "met": "Efectivo" }, { "id": "111", "d": "2026-07-10", "c": "marc", "cat": "Pack 8", "amt": 440, "cl": "Karina Caelles", "st": "fin", "met": "Efectivo" }, { "id": "59", "d": "2026-05-31", "c": "marc", "cat": "Pack 8", "amt": 440, "cl": "Karina Caelles", "st": "fin", "met": "Efectivo" }, { "id": "150", "d": "2026-06-11", "c": "marc", "cat": "Valoraci\xF3n inicial", "amt": 100, "cl": "Gemma Carrete", "st": "fin", "met": "Efectivo" }, { "id": "177", "d": "2026-06-11", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Gemma Carrete", "st": "fin", "met": "Efectivo" }, { "id": "115", "d": "2026-06-08", "c": "axis", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Derek Puig", "st": "fin", "met": "Efectivo" }, { "id": "113", "d": "2026-06-01", "c": "marc", "cat": "Valoraci\xF3n inicial", "amt": 100, "cl": "Derek Puig", "st": "fin", "met": "Efectivo" }, { "id": "116", "d": "2026-06-08", "c": "marc", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Giovani Puig", "st": "fin", "met": "Efectivo" }, { "id": "131", "d": "2026-06-02", "c": "marc", "cat": "Valoraci\xF3n inicial", "amt": 100, "cl": "Giovani Puig", "st": "fin", "met": "Efectivo" }, { "id": "138", "d": "2026-06-23", "c": "marc", "cat": "Online", "amt": 60, "cl": "Gerard F\xE9rnandez Castellanos", "st": "fin", "met": "Transferencia" }, { "id": "137", "d": "2026-06-23", "c": "marc", "cat": "Online", "amt": 60, "cl": "Gerard F\xE9rnandez Castellanos", "st": "fin", "met": "Transferencia" }, { "id": "98", "d": "2026-06-04", "c": "marc", "cat": "Pack 8", "amt": 440, "cl": "Fatima Ginard Aguilera", "st": "fin", "met": "Efectivo" }, { "id": "53", "d": "2026-05-19", "c": "marc", "cat": "Pack 8", "amt": 440, "cl": "Fatima Ginard Aguilera", "st": "fin", "met": "Efectivo" }, { "id": "187", "d": "2026-06-26", "c": "marc", "cat": "Pack 8", "amt": 440, "cl": "Emma Stanley Carneiro", "st": "fin", "met": "Efectivo" }, { "id": "94", "d": "2026-05-28", "c": "marc", "cat": "Pack 8", "amt": 440, "cl": "Emma Stanley Carneiro", "st": "fin", "met": "Efectivo" }, { "id": "50", "d": "2026-05-04", "c": "marc", "cat": "Pack 8", "amt": 440, "cl": "Emma Stanley Carneiro", "st": "fin", "met": "Efectivo" }, { "id": "51", "d": "2026-05-19", "c": "marc", "cat": "Pack 8", "amt": 440, "cl": "Alex Ruiz Gutierrez", "st": "fin", "met": "Efectivo" }, { "id": "49", "d": "2026-05-03", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Victor Lebron", "st": "fin", "met": "Transferencia" }, { "id": "101", "d": "2026-06-14", "c": "marc", "cat": "Small group / Grupo reducido", "amt": 240, "cl": "Victor Lebron", "st": "fin", "met": "Transferencia" }, { "id": "148", "d": "2026-07-06", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Savi Moschillo", "st": "fin", "met": "Transferencia" }, { "id": "64", "d": "2026-07-06", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Savi Moschillo", "st": "fin", "met": "Transferencia" }, { "id": "70", "d": "2026-05-08", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Sara G\xF3mez Gonz\xE1lez", "st": "fin", "met": "Efectivo" }, { "id": "71", "d": "2026-05-14", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Rafa Moreu", "st": "fin", "met": "Transferencia" }, { "id": "146", "d": "2026-06-14", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Rafa Moreu", "st": "fin", "met": "Transferencia" }, { "id": "56", "d": "2026-06-27", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Pau G\xF3mez", "st": "fin", "met": "Transferencia" }, { "id": "223", "d": "2026-06-27", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Pau G\xF3mez", "st": "fin", "met": "Transferencia" }, { "id": "95", "d": "2026-06-23", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Pau Fern\xE1ndez Peque", "st": "fin", "met": "Transferencia" }, { "id": "92", "d": "2026-06-23", "c": "marc", "cat": "Valoraci\xF3n inicial", "amt": 100, "cl": "Pau Fern\xE1ndez Peque", "st": "fin", "met": "Transferencia" }, { "id": "181", "d": "2026-07-08", "c": "marc", "cat": "Small group / Grupo reducido", "amt": 135, "cl": "Pau Fern\xE1ndez", "st": "fin", "met": "Transferencia" }, { "id": "102", "d": "2026-07-08", "c": "marc", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Pau Fern\xE1ndez", "st": "fin", "met": "Transferencia" }, { "id": "93", "d": "2026-07-08", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Pau Fern\xE1ndez", "st": "fin", "met": "Transferencia" }, { "id": "68", "d": "2026-07-07", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Pablo S\xE1nchez", "st": "fin", "met": "Transferencia" }, { "id": "147", "d": "2026-06-07", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Pablo S\xE1nchez", "st": "fin", "met": "Tarjeta" }, { "id": "79", "d": "2026-07-03", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Marc Esteban", "st": "fin", "met": "Transferencia" }, { "id": "175", "d": "2026-07-03", "c": "marc", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Marc Esteban", "st": "fin", "met": "Transferencia" }, { "id": "118", "d": "2026-06-11", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Manel Ram\xEDrez", "st": "fin", "met": "Efectivo" }, { "id": "69", "d": "2026-05-08", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Manel Ram\xEDrez", "st": "fin", "met": "Transferencia" }, { "id": "54", "d": "2026-05-12", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Mali Fari\xF1a", "st": "fin", "met": "Efectivo" }, { "id": "127", "d": "2026-05-28", "c": "marc", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Jan Barbero", "st": "fin", "met": "Transferencia" }, { "id": "48", "d": "2026-04-30", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Jan Barbero", "st": "fin", "met": "Transferencia" }, { "id": "110", "d": "2026-06-29", "c": "marc", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Guille Ferr\xEDn", "st": "fin", "met": "Transferencia" }, { "id": "52", "d": "2026-06-22", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Guille Ferr\xEDn", "st": "fin", "met": "Transferencia" }, { "id": "77", "d": "2026-07-12", "c": "marc", "cat": "Bono 3 sesiones", "amt": 180, "cl": "George Andrews", "st": "fin", "met": "Transferencia" }, { "id": "99", "d": "2026-05-29", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Carlos Mart\xEDn", "st": "fin", "met": "Efectivo" }, { "id": "85", "d": "2026-05-22", "c": "marc", "cat": "Valoraci\xF3n inicial", "amt": 100, "cl": "Carlos Mart\xEDn", "st": "fin", "met": "Efectivo" }, { "id": "72", "d": "2026-05-31", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Ana Mar\xEDa Torres Hug", "st": "fin", "met": "Transferencia" }, { "id": "123", "d": "2026-06-04", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Ana Mar\xEDa Torres Hug", "st": "fin", "met": "Transferencia" }, { "id": "13", "d": "2026-05-15", "c": "marc", "cat": "Valoraci\xF3n inicial", "amt": 100, "cl": "\xC1ngel Fontova", "st": "fin", "met": "Transferencia" }, { "id": "14", "d": "2026-05-15", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "\xC1ngel Fontova", "st": "fin", "met": "Transferencia" }, { "id": "204", "d": "2026-07-11", "c": "eric", "cat": "Pack 4", "amt": 204, "cl": "Claudia D\xF6rr", "st": "fin", "met": "Efectivo" }, { "id": "209", "d": "2026-07-11", "c": "eric", "cat": "Pack 4", "amt": 204, "cl": "Lara D\xEDaz", "st": "fin", "met": "Transferencia" }, { "id": "105", "d": "2026-07-11", "c": "eric", "cat": "Pack 8", "amt": 376, "cl": "Gemma Sanmart\xED", "st": "fin", "met": "Transferencia" }, { "id": "202", "d": "2026-06-29", "c": "eric", "cat": "Valoraci\xF3n inicial", "amt": 100, "cl": "Mat\xEDas Dupraz", "st": "fin", "met": "Transferencia" }, { "id": "195", "d": "2026-07-04", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Victor del Barrio", "st": "fin", "met": "Transferencia" }, { "id": "193", "d": "2026-06-30", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "In\xE9s Freitas", "st": "fin", "met": "Transferencia" }, { "id": "164", "d": "2026-06-30", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "In\xE9s Freitas", "st": "fin", "met": "Transferencia" }, { "id": "124", "d": "2026-06-30", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "In\xE9s Freitas", "st": "fin", "met": "Transferencia" }, { "id": "34", "d": "2026-06-30", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "In\xE9s Freitas", "st": "fin", "met": "Transferencia" }, { "id": "201", "d": "2026-06-29", "c": "eric", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Mat\xEDas Dupraz", "st": "fin", "met": "Transferencia" }, { "id": "156", "d": "2026-06-19", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 50, "cl": "Victor Ort\xEDz", "st": "fin", "met": "Transferencia" }, { "id": "200", "d": "2026-06-30", "c": "eric", "cat": "Pack 4", "amt": 240, "cl": "Aitor Roura", "st": "fin", "met": "Transferencia" }, { "id": "199", "d": "2026-06-29", "c": "eric", "cat": "Valoraci\xF3n inicial", "amt": 100, "cl": "Luca Dupraz", "st": "fin", "met": "Transferencia" }, { "id": "198", "d": "2026-06-29", "c": "eric", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Luca Dupraz", "st": "fin", "met": "Transferencia" }, { "id": "197", "d": "2026-06-30", "c": "sergio", "cat": "Sesi\xF3n individual", "amt": 60, "cl": "Luke", "st": "fin", "met": "Efectivo" }, { "id": "196", "d": "2026-06-30", "c": "sergio", "cat": "Valoraci\xF3n inicial", "amt": 100, "cl": "Luke", "st": "fin", "met": "Efectivo" }, { "id": "145", "d": "2026-06-26", "c": "sergio", "cat": "Pack 4", "amt": 240, "cl": "Liam Sierra Burke", "st": "fin", "met": "Efectivo" }, { "id": "27", "d": "2026-06-27", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Alessandra Pellini", "st": "fin", "met": "Transferencia" }, { "id": "165", "d": "2026-06-28", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 50, "cl": "Sebastian Diaz", "st": "fin", "met": "Transferencia" }, { "id": "192", "d": "2026-06-28", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Ivan Caba\xF1as", "st": "fin", "met": "Transferencia" }, { "id": "168", "d": "2026-06-28", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Jos\xE9 David Fuentes", "st": "fin", "met": "Efectivo" }, { "id": "191", "d": "2026-06-28", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Josue Moreno", "st": "fin", "met": "Efectivo" }, { "id": "167", "d": "2026-06-28", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 90, "cl": "Sheff JJ Agent", "st": "fin", "met": "Transferencia" }, { "id": "163", "d": "2026-06-28", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Edu Vila", "st": "fin", "met": "Efectivo" }, { "id": "161", "d": "2026-06-28", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Edu Vila", "st": "fin", "met": "Efectivo" }, { "id": "190", "d": "2026-06-28", "c": "eric", "cat": "Pack 8", "amt": 440, "cl": "Eugenia Freniche", "st": "fin", "met": "Transferencia" }, { "id": "189", "d": "2026-06-28", "c": "eric", "cat": "Pack 4", "amt": 204, "cl": "Paula Rojals", "st": "fin", "met": "Transferencia" }, { "id": "169", "d": "2026-06-25", "c": "eric", "cat": "Pack 8", "amt": 376, "cl": "Marco Cuoco", "st": "fin", "met": "Transferencia" }, { "id": "166", "d": "2026-06-25", "c": "eric", "cat": "Pack 4", "amt": 240, "cl": "I\xF1aki Echeandia", "st": "fin", "met": "Transferencia" }, { "id": "5", "d": "2026-06-20", "c": "eric", "cat": "Pack 8", "amt": 440, "cl": "Diego Navarrete", "st": "fin", "met": "Transferencia" }, { "id": "160", "d": "2026-06-20", "c": "eric", "cat": "Pack 4", "amt": 110, "cl": "Diego Navarrete", "st": "fin", "met": "Transferencia" }, { "id": "162", "d": "2026-06-19", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Sheff JJ Agent", "st": "fin", "met": "Transferencia" }, { "id": "141", "d": "2026-06-19", "c": "eric", "cat": "Pack 8", "amt": 440, "cl": "Patricia Benito", "st": "fin", "met": "Transferencia" }, { "id": "142", "d": "2026-06-19", "c": "eric", "cat": "Pack 8", "amt": 440, "cl": "Oscar D\xEDaz", "st": "fin", "met": "Transferencia" }, { "id": "159", "d": "2026-06-19", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Alessandra Pellini", "st": "fin", "met": "Transferencia" }, { "id": "158", "d": "2026-06-19", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Manel Ram\xEDrez", "st": "fin", "met": "Transferencia" }, { "id": "155", "d": "2026-06-19", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Victor del Barrio", "st": "fin", "met": "Transferencia" }, { "id": "153", "d": "2026-06-19", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Edu Vila", "st": "fin", "met": "Transferencia" }, { "id": "152", "d": "2026-06-19", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Roger Vila", "st": "fin", "met": "Transferencia" }, { "id": "125", "d": "2026-06-19", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Ariadna Calvet", "st": "fin", "met": "Transferencia" }, { "id": "157", "d": "2026-06-19", "c": "eric", "cat": "Pack 8", "amt": 376, "cl": "Iv\xE1n Reche", "st": "fin", "met": "Efectivo" }, { "id": "154", "d": "2026-06-19", "c": "eric", "cat": "Pack 8", "amt": 440, "cl": "Mart\xEDn Cahisa", "st": "fin", "met": "Transferencia" }, { "id": "151", "d": "2026-06-19", "c": "eric", "cat": "Pack 4", "amt": 204, "cl": "Husa Vallecillos", "st": "fin", "met": "Efectivo" }, { "id": "144", "d": "2026-06-14", "c": "axis", "cat": "Valoraci\xF3n inicial", "amt": 100, "cl": "Liam Sierra Burke", "st": "fin", "met": "Efectivo" }, { "id": "143", "d": "2026-06-12", "c": "eric", "cat": "Pack 4", "amt": 240, "cl": "Ariel Larralde", "st": "fin", "met": "Transferencia" }, { "id": "97", "d": "2026-06-11", "c": "axis", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Graciano Carrillo Pousa", "st": "fin", "met": "Tarjeta" }, { "id": "84", "d": "2026-06-11", "c": "axis", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Graciano Carrillo Pousa", "st": "fin", "met": "Tarjeta" }, { "id": "46", "d": "2026-06-07", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Ariadna G\xF3mez", "st": "fin", "met": "Transferencia" }, { "id": "107", "d": "2026-05-31", "c": "eric", "cat": "Bono 2 sesiones para las 10", "amt": 130, "cl": "Isabel De Arcos", "st": "fin", "met": "Transferencia" }, { "id": "106", "d": "2026-05-31", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Cristina Griego", "st": "fin", "met": "Efectivo" }, { "id": "44", "d": "2026-05-04", "c": "eric", "cat": "Pack 8", "amt": 520, "cl": "Isabel De Arcos", "st": "fin", "met": "Transferencia" }, { "id": "75", "d": "2026-05-31", "c": "axis", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Graciano Carrillo Pousa", "st": "fin", "met": "Transferencia" }, { "id": "73", "d": "2026-05-31", "c": "axis", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Abel Rodriguez", "st": "fin", "met": "Transferencia" }, { "id": "63", "d": "2026-05-31", "c": "axis", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Graciano Carrillo Pousa", "st": "fin", "met": "Transferencia" }, { "id": "60", "d": "2026-05-31", "c": "axis", "cat": "Pack 4", "amt": 240, "cl": "Pavel Kadochnikov", "st": "fin", "met": "Efectivo" }, { "id": "55", "d": "2026-05-31", "c": "axis", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "John Mulero", "st": "fin", "met": "Transferencia" }, { "id": "36", "d": "2026-05-30", "c": "eric", "cat": "Pack 8", "amt": 376, "cl": "Marco Cuoco", "st": "fin", "met": "Transferencia" }, { "id": "45", "d": "2026-05-30", "c": "eric", "cat": "Pack 8", "amt": 376, "cl": "Jordi Cascos", "st": "fin", "met": "Efectivo" }, { "id": "43", "d": "2026-05-25", "c": "eric", "cat": "Pack 4", "amt": 240, "cl": "I\xF1aki Echeandia", "st": "fin", "met": "Transferencia" }, { "id": "42", "d": "2026-05-23", "c": "eric", "cat": "Valoraci\xF3n inicial", "amt": 100, "cl": "Ariel Larralde", "st": "fin", "met": "Transferencia" }, { "id": "7", "d": "2026-04-27", "c": "eric", "cat": "Pack 8", "amt": 376, "cl": "Jordi Cascos", "st": "fin", "met": "Efectivo" }, { "id": "38", "d": "2026-05-23", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Ana Dom\xEDnguez", "st": "fin", "met": "Transferencia" }, { "id": "41", "d": "2026-05-23", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Manel Ram\xEDrez", "st": "fin", "met": "Transferencia" }, { "id": "37", "d": "2026-05-22", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Nacho Felechosa", "st": "fin", "met": "Transferencia" }, { "id": "8", "d": "2026-05-22", "c": "eric", "cat": "Pack 4", "amt": 204, "cl": "Lara D\xEDaz", "st": "fin", "met": "Transferencia" }, { "id": "6", "d": "2026-05-22", "c": "eric", "cat": "Pack 4", "amt": 204, "cl": "Paula Rojals", "st": "fin", "met": "Transferencia" }, { "id": "10", "d": "2026-05-22", "c": "eric", "cat": "Pack 8", "amt": 400, "cl": "Mart\xEDn Cahisa", "st": "fin", "met": "Transferencia" }, { "id": "16", "d": "2026-05-16", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Isabel De Arcos", "st": "fin", "met": "Transferencia" }, { "id": "17", "d": "2026-05-16", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Isabel De Arcos", "st": "fin", "met": "Transferencia" }, { "id": "18", "d": "2026-05-16", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Isabel De Arcos", "st": "fin", "met": "Transferencia" }, { "id": "19", "d": "2026-05-16", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Isabel De Arcos", "st": "fin", "met": "Transferencia" }, { "id": "20", "d": "2026-05-16", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Isabel De Arcos", "st": "fin", "met": "Transferencia" }, { "id": "31", "d": "2026-05-16", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Jos\xE9 David Fuentes", "st": "fin", "met": "Efectivo" }, { "id": "30", "d": "2026-05-16", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Laura Mart\xEDnez", "st": "fin", "met": "Efectivo" }, { "id": "29", "d": "2026-05-16", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 50, "cl": "Alfredo Varela", "st": "fin", "met": "Efectivo" }, { "id": "26", "d": "2026-05-16", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Claudia D\xF6rr", "st": "fin", "met": "Efectivo" }, { "id": "24", "d": "2026-05-16", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Abel M\xE1rquez", "st": "fin", "met": "Efectivo" }, { "id": "1", "d": "2026-05-16", "c": "eric", "cat": "Pack 8", "amt": 400, "cl": "Oscar D\xEDaz", "st": "fin", "met": "Transferencia" }, { "id": "2", "d": "2026-05-16", "c": "eric", "cat": "Pack 8", "amt": 400, "cl": "Patricia Benito", "st": "fin", "met": "Transferencia" }, { "id": "25", "d": "2026-05-16", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Iago Ib\xE1\xF1ez", "st": "fin", "met": "Transferencia" }, { "id": "23", "d": "2026-05-16", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 50, "cl": "David Pulido", "st": "fin", "met": "Transferencia" }, { "id": "22", "d": "2026-05-16", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Vivi Bienefeld", "st": "fin", "met": "Efectivo" }, { "id": "21", "d": "2026-05-16", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 55, "cl": "Ana Jimenez", "st": "fin", "met": "Efectivo" }, { "id": "28", "d": "2026-05-16", "c": "eric", "cat": "Pack 8", "amt": 440, "cl": "Dirk Hahneiser", "st": "fin", "met": "Transferencia" }, { "id": "12", "d": "2026-05-05", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "In\xE9s Freitas", "st": "fin", "met": "Transferencia" }, { "id": "11", "d": "2026-05-05", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "In\xE9s Freitas", "st": "fin", "met": "Transferencia" }, { "id": "9", "d": "2026-05-05", "c": "eric", "cat": "Valoraci\xF3n inicial", "amt": 100, "cl": "In\xE9s Freitas", "st": "fin", "met": "Transferencia" }, { "id": "4", "d": "2026-05-13", "c": "eric", "cat": "Pack 8", "amt": 376, "cl": "Rosa Buld\xF3", "st": "fin", "met": "Efectivo" }, { "id": "3", "d": "2026-05-13", "c": "eric", "cat": "Pack 8", "amt": 376, "cl": "Iv\xE1n Reche", "st": "fin", "met": "Transferencia" }, { "id": "231", "d": "2026-04-27", "c": "marc", "cat": "Pack 4", "amt": 210, "cl": "JJ Gabriel", "st": "pen", "met": "" }, { "id": "62", "d": "2026-05-01", "c": "axis", "cat": "Pack 4", "amt": 240, "cl": "Toni Fern\xE1ndez", "st": "pen", "met": "" }, { "id": "67", "d": "2026-05-07", "c": "axis", "cat": "Online", "amt": 60, "cl": "Iker Bravo", "st": "pen", "met": "" }, { "id": "230", "d": "2026-05-11", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "JJ Gabriel", "st": "pen", "met": "" }, { "id": "66", "d": "2026-05-14", "c": "axis", "cat": "Online", "amt": 60, "cl": "Iker Bravo", "st": "pen", "met": "" }, { "id": "78", "d": "2026-05-15", "c": "axis", "cat": "Valoraci\xF3n inicial", "amt": 100, "cl": "Sergio S\xE1nchez", "st": "pen", "met": "" }, { "id": "233", "d": "2026-05-18", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "JJ Gabriel", "st": "pen", "met": "" }, { "id": "236", "d": "2026-05-20", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "JJ Gabriel", "st": "pen", "met": "" }, { "id": "86", "d": "2026-05-22", "c": "axis", "cat": "Pack 4", "amt": 240, "cl": "Sergio S\xE1nchez", "st": "pen", "met": "" }, { "id": "81", "d": "2026-05-25", "c": "axis", "cat": "Valoraci\xF3n inicial", "amt": 100, "cl": "JJ Gabriel", "st": "pen", "met": "" }, { "id": "82", "d": "2026-05-25", "c": "axis", "cat": "Valoraci\xF3n inicial", "amt": 100, "cl": "Khairo", "st": "pen", "met": "" }, { "id": "89", "d": "2026-05-25", "c": "axis", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Pavel Kadochnikov", "st": "pen", "met": "" }, { "id": "240", "d": "2026-05-25", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Khairo", "st": "pen", "met": "" }, { "id": "61", "d": "2026-05-27", "c": "marc", "cat": "Pack 4", "amt": 120, "cl": "Toni Fern\xE1ndez", "st": "pen", "met": "" }, { "id": "206", "d": "2026-06-01", "c": "sergio", "cat": "Pack 4", "amt": 240, "cl": "Lucas Gabriel", "st": "pen", "met": "" }, { "id": "129", "d": "2026-06-01", "c": "axis", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Pau Fern\xE1ndez Peque", "st": "pen", "met": "" }, { "id": "139", "d": "2026-06-01", "c": "axis", "cat": "Pack 8", "amt": 440, "cl": "Gerard F\xE9rnandez Castellanos", "st": "pen", "met": "" }, { "id": "140", "d": "2026-06-04", "c": "axis", "cat": "Small group / Grupo reducido", "amt": 405, "cl": "Gerard F\xE9rnandez Castellanos", "st": "pen", "met": "" }, { "id": "119", "d": "2026-06-04", "c": "axis", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Graciano Carrillo Pousa", "st": "pen", "met": "" }, { "id": "237", "d": "2026-06-05", "c": "axis", "cat": "Pack 4", "amt": 240, "cl": "JJ Gabriel", "st": "pen", "met": "" }, { "id": "228", "d": "2026-06-08", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "JJ Gabriel", "st": "pen", "met": "" }, { "id": "241", "d": "2026-06-08", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Lucas Gabriel", "st": "pen", "met": "" }, { "id": "149", "d": "2026-06-11", "c": "axis", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Graciano Carrillo Pousa", "st": "pen", "met": "" }, { "id": "242", "d": "2026-06-15", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Lucas Gabriel", "st": "pen", "met": "" }, { "id": "234", "d": "2026-06-16", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "JJ Gabriel", "st": "pen", "met": "" }, { "id": "176", "d": "2026-06-18", "c": "axis", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Savi Moschillo", "st": "pen", "met": "" }, { "id": "173", "d": "2026-06-18", "c": "axis", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Graciano Carrillo Pousa", "st": "pen", "met": "" }, { "id": "174", "d": "2026-06-18", "c": "axis", "cat": "Pack 8", "amt": 440, "cl": "Gerard F\xE9rnandez Castellanos", "st": "pen", "met": "" }, { "id": "235", "d": "2026-06-19", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "JJ Gabriel", "st": "pen", "met": "" }, { "id": "226", "d": "2026-06-22", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Giorgi  Kochorashvili", "st": "pen", "met": "" }, { "id": "227", "d": "2026-06-22", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Giorgi  Kochorashvili", "st": "pen", "met": "" }, { "id": "232", "d": "2026-06-22", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "JJ Gabriel", "st": "pen", "met": "" }, { "id": "180", "d": "2026-06-22", "c": "axis", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Pavel Kadochnikov", "st": "pen", "met": "" }, { "id": "239", "d": "2026-06-23", "c": "axis", "cat": "Pack 4", "amt": 240, "cl": "JJ Gabriel", "st": "pen", "met": "" }, { "id": "182", "d": "2026-06-23", "c": "axis", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Pau Fern\xE1ndez Peque", "st": "pen", "met": "" }, { "id": "238", "d": "2026-06-24", "c": "axis", "cat": "Pack 4", "amt": 240, "cl": "JJ Gabriel", "st": "pen", "met": "" }, { "id": "183", "d": "2026-06-24", "c": "axis", "cat": "Pack 8", "amt": 440, "cl": "Fatima Ginard Aguilera", "st": "pen", "met": "" }, { "id": "185", "d": "2026-06-25", "c": "axis", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Graciano Carrillo Pousa", "st": "pen", "met": "" }, { "id": "225", "d": "2026-06-27", "c": "marc", "cat": "Pack 4", "amt": 90, "cl": "Giorgi  Kochorashvili", "st": "pen", "met": "" }, { "id": "244", "d": "2026-06-29", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Alex Sala", "st": "pen", "met": "" }, { "id": "245", "d": "2026-06-29", "c": "marc", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Arnau Tenas", "st": "pen", "met": "" }, { "id": "221", "d": "2026-06-29", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Manel Ram\xEDrez", "st": "pen", "met": "" }, { "id": "246", "d": "2026-06-29", "c": "marc", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Marc Tenas", "st": "pen", "met": "" }, { "id": "262", "d": "2026-07-01", "c": "marc", "cat": "Small group / Grupo reducido", "amt": 360, "cl": "Pau Fern\xE1ndez Peque", "st": "pen", "met": "" }, { "id": "247", "d": "2026-07-02", "c": "marc", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Graciano Carrillo Pousa", "st": "pen", "met": "" }, { "id": "205", "d": "2026-07-03", "c": "sergio", "cat": "Pack 4", "amt": 240, "cl": "Liam Sierra Burke", "st": "pen", "met": "" }, { "id": "210", "d": "2026-07-04", "c": "eric", "cat": "Pack 8", "amt": 440, "cl": "Oscar D\xEDaz", "st": "pen", "met": "" }, { "id": "208", "d": "2026-07-06", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "In\xE9s Freitas", "st": "pen", "met": "" }, { "id": "250", "d": "2026-07-06", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Marc Tenas", "st": "pen", "met": "" }, { "id": "249", "d": "2026-07-06", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Alex Sala", "st": "pen", "met": "" }, { "id": "207", "d": "2026-07-06", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Roger Vila", "st": "pen", "met": "" }, { "id": "211", "d": "2026-07-08", "c": "eric", "cat": "Valoraci\xF3n inicial", "amt": 100, "cl": "Paula Guti\xE9rrez", "st": "pen", "met": "" }, { "id": "252", "d": "2026-07-08", "c": "marc", "cat": "Valoraci\xF3n inicial", "amt": 100, "cl": "Diego silva", "st": "pen", "met": "" }, { "id": "213", "d": "2026-07-09", "c": "eric", "cat": "Pack 8", "amt": 440, "cl": "Susana Moya", "st": "pen", "met": "" }, { "id": "212", "d": "2026-07-09", "c": "eric", "cat": "Pack 8", "amt": 376, "cl": "Jordi Cascos", "st": "pen", "met": "" }, { "id": "214", "d": "2026-07-09", "c": "eric", "cat": "Pack 8", "amt": 440, "cl": "Paula Guti\xE9rrez", "st": "pen", "met": "" }, { "id": "253", "d": "2026-07-09", "c": "marc", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Graciano Carrillo Pousa", "st": "pen", "met": "" }, { "id": "254", "d": "2026-07-09", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Ruben Bonachera", "st": "pen", "met": "" }, { "id": "255", "d": "2026-07-09", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Diego silva", "st": "pen", "met": "" }, { "id": "256", "d": "2026-07-10", "c": "marc", "cat": "Pack 4", "amt": 240, "cl": "Carlos Mart\xEDn", "st": "pen", "met": "" }, { "id": "215", "d": "2026-07-11", "c": "eric", "cat": "Pack 8", "amt": 440, "cl": "Patricia Benito", "st": "pen", "met": "" }, { "id": "216", "d": "2026-07-13", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "In\xE9s Freitas", "st": "pen", "met": "" }, { "id": "217", "d": "2026-07-15", "c": "eric", "cat": "Pack 8", "amt": 440, "cl": "Gemma Sanmart\xED", "st": "pen", "met": "" }, { "id": "218", "d": "2026-07-15", "c": "eric", "cat": "Pack 8", "amt": 440, "cl": "Marco Cuoco", "st": "pen", "met": "" }, { "id": "219", "d": "2026-07-16", "c": "eric", "cat": "Sesi\xF3n individual", "amt": 65, "cl": "Victor del Barrio", "st": "pen", "met": "" }, { "id": "220", "d": "2026-07-17", "c": "eric", "cat": "Pack 8", "amt": 440, "cl": "Mart\xEDn Cahisa", "st": "pen", "met": "" }];
+const PAYMENTS_SEED = [];
 const pad = (n) => String(n).padStart(2, "0");
 const todayISO = () => {
   const d = /* @__PURE__ */ new Date();
@@ -76,15 +78,19 @@ function categorize(title) {
   return title.trim().charAt(0).toUpperCase() + title.trim().slice(1);
 }
 const eur = (n) => n.toLocaleString("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
-const CREATOR_LABELS = { marc: "Marc", eric: "Eric", sergio: "Sergio", marti: "Mart\xED", marina: "Marina", axis: "Axis (gen\xE9rico)" };
+// REGLA (29/09/2026): Axis es una entidad propia, igual que un coach.
+// Los pagos creados por "Axis Health & Performance", por el administrador o
+// por cualquier usuario que no sea un coach conocido van a "Axis", NUNCA a Marc.
+// Es la misma regla que aplica el Excel del plan financiero (bloque "Axis (centro)").
+const CREATOR_LABELS = { marc: "Marc", erik: "Erik", daniel: "Daniel", sergio: "Sergio", marti: "Mart\xED", marina: "Marina", axis: "Axis" };
+const CREATOR_ORDER = ["marc", "erik", "sergio", "daniel", "marti", "marina", "axis"];
+const AXIS_COLOR = "#2F6F6D";
 function creatorId(name) {
   const c = stripAccents((name || "").replace(/&amp/g, "&"));
   if (c.includes("erik") || c.includes("eric")) return "erik";
+  // Cuenta del centro y administrador -> Axis (antes se sumaban a Marc).
+  if (!c.trim() || c.includes("axis") || c.includes("admin")) return "axis";
   if (c.includes("marc") && !c.includes("marcos")) return "marc";
-  // Los pagos creados como "Axis Health & Performance" (cuenta general del
-  // centro) son de Marc: asi los contabiliza tambien el Excel del plan
-  // financiero (SUMIFS de "Marc Rosa" + "Axis Health & Performance").
-  if (c.includes("axis health") && c.includes("performance")) return "marc";
   if (c.includes("daniel")) return "daniel";
   if (c.includes("sergio")) return "sergio";
   if (c.includes("marti")) return "marti";
@@ -113,13 +119,13 @@ function parseAimHarderPayments(payments) {
     if (p.id == null) continue;
     const d = (p.date || "").slice(0, 10); // "2026-06-01 00:00:00" -> "2026-06-01"
     if (!d) continue;
-    out.push({ id: String(p.id), cl: p.name || "", cat: catFromConcept(p.concept || ""), amt: toAmt(p.amount), c: creatorId(p.creator || ""), d, st: "pen", met: "" });
+    out.push({ id: String(p.id), cl: p.name || "", cat: catFromConcept(p.concept || ""), amt: toAmt(p.amount), c: creatorId(p.creator || ""), cr: p.creator || "", co: p.concept || "", d, st: "pen", met: "" });
   }
   for (const p of payments.paid || []) {
     if (p.id == null) continue;
     const d = dmyToISO(p.date || "");
     if (!d) continue;
-    out.push({ id: String(p.id), cl: p.name || "", cat: catFromConcept(p.concept || ""), amt: toAmt(p.amount), c: creatorId(p.creator || ""), d, st: "fin", met: "" });
+    out.push({ id: String(p.id), cl: p.name || "", cat: catFromConcept(p.concept || ""), amt: toAmt(p.amount), c: creatorId(p.creator || ""), cr: p.creator || "", co: p.concept || "", d, st: "fin", met: "" });
   }
   return out;
 }
@@ -156,6 +162,8 @@ function parsePaymentsCSV(text) {
       cat: catFromConcept(c[iCon] || ""),
       amt: amount,
       c: creatorId(c[iCre] || ""),
+      cr: c[iCre] || "",
+      co: c[iCon] || "",
       d: dmyToISO(isPending ? c[iFec] : estado),
       st: isPending ? "pen" : "fin",
       met: isPending ? "" : met
@@ -395,6 +403,460 @@ function downloadIcs(sessions, coaches, rooms, filename) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+// ===== AXIS · Módulos "Objetivos" y "Por persona" (02/10/2026). Fuente: extras.jsx =====
+const MESES_CORTOS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+const MESES_LARGOS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+const C_INK = "#12211B", C_MUTED = "#5A6B63", C_LINE = "#DDE4E0", C_SOFT = "#EDF1EF";
+const C_GOOD = "#2E7D4F", C_WARN = "#B45309", C_BAD = "#9B1C1C";
+const eur0 = (n) => (n || 0).toLocaleString("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+const pct0 = (x) => (isFinite(x) ? Math.round(x * 100) : 0) + " %";
+function personKeyOfCoach(c) {
+  const k = creatorId(c.name || "");
+  return k === "axis" ? "c:" + c.id : k;
+}
+function personKeyOfPayment(p) {
+  const k = p.cr != null ? creatorId(p.cr) : p.c;
+  return k === "eric" ? "erik" : k;
+}
+function personKeyOfSession(s, coaches) {
+  const c = coaches.find((x) => x.id === s.coachId);
+  if (c) return personKeyOfCoach(c);
+  if (s.coachRaw) {
+    const k = creatorId(s.coachRaw);
+    return k === "axis" ? "__none__" : k;
+  }
+  return "__none__";
+}
+function buildPeople(coaches) {
+  const map = /* @__PURE__ */ new Map();
+  for (const c of coaches) {
+    const k = personKeyOfCoach(c);
+    if (!map.has(k)) map.set(k, { key: k, name: c.name, short: (c.name || "").split(" ")[0], color: c.color || "#6B7280" });
+  }
+  const fixed = { marc: "Marc Rosa", erik: "Erik Benavides", sergio: "Sergio Marín", marti: "Martí Soler", marina: "Marina", daniel: "Daniel Rodriguez" };
+  for (const k of Object.keys(fixed)) {
+    if (!map.has(k)) map.set(k, { key: k, name: fixed[k], short: fixed[k].split(" ")[0], color: "#6B7280" });
+  }
+  map.set("axis", { key: "axis", name: "Axis (centro)", short: "Axis", color: AXIS_COLOR });
+  map.set("__none__", { key: "__none__", name: "Sin asignar", short: "Sin asignar", color: "#9CA3AF" });
+  return map;
+}
+const PERSON_ORDER = ["marc", "erik", "sergio", "daniel", "marti", "marina"];
+function sortPeople(keys) {
+  const rank = (k) => k === "axis" ? 900 : k === "__none__" ? 999 : PERSON_ORDER.indexOf(k) >= 0 ? PERSON_ORDER.indexOf(k) : 500;
+  return [...keys].sort((a, b) => rank(a) - rank(b) || String(a).localeCompare(String(b)));
+}
+const FAMILIAS = ["Valoración", "Entrenamiento personal", "Fisioterapia", "Nutrición", "Psicología", "Grupos", "Online", "Otros"];
+function areaOf(t) {
+  if (t.includes("fisio")) return "Fisioterapia";
+  if (t.includes("nutri")) return "Nutrición";
+  if (t.includes("psic") || /\bps\b/.test(t)) return "Psicología";
+  if (t.includes("entrenamiento")) return "Entrenamiento personal";
+  return null;
+}
+function productOf(conceptRaw, fallbackCat) {
+  const raw = String(conceptRaw || fallbackCat || "").replace(/\s*\d{1,2}\/\d{4}\s*$/, "").trim();
+  const t = stripAccents(raw);
+  const area = areaOf(t);
+  const num = (re) => {
+    const m = t.match(re);
+    return m ? parseFloat(m[1].replace(",", ".")) : null;
+  };
+  if (!t) return { familia: "Otros", nombre: "Sin concepto", sesiones: null };
+  if (t.includes("gambaru")) {
+    const n = num(/(\d+)\s*mensual/);
+    return { familia: "Grupos", nombre: "Gambaru" + (n ? ` · ${n} mensuales` : ""), sesiones: n };
+  }
+  if (t.includes("axis club")) {
+    const n = num(/(\d+)\s*mensual/);
+    if (n) return { familia: "Grupos", nombre: `The Axis Club · ${n} mensuales`, sesiones: n };
+    if (t.includes("mes 1")) return { familia: "Grupos", nombre: "The Axis Club · Mes 1", sesiones: null };
+    return { familia: "Grupos", nombre: "The Axis Club", sesiones: null };
+  }
+  if (t.includes("performance")) return { familia: "Grupos", nombre: "Performance Group", sesiones: 8 };
+  if (t.includes("valoraci")) return area === "Psicología" ? { familia: "Psicología", nombre: "Valoración inicial · Psicología", sesiones: 1 } : { familia: "Valoración", nombre: "Valoración inicial", sesiones: 1 };
+  if (t.includes("trimestral") && area === "Nutrición") return { familia: "Nutrición", nombre: "Pack trimestral · Nutrición", sesiones: null };
+  if (t.includes("grupo")) {
+    const n = num(/\((\d+)\s*sesion/);
+    return { familia: "Grupos", nombre: "Grupo reducido" + (n ? ` (${n} sesiones)` : ""), sesiones: n };
+  }
+  if (t.includes("bono") || t.includes("pack")) {
+    const n = num(/(?:bono|pack)\s*(\d+(?:[.,]\d+)?)/);
+    const fam = area || "Entrenamiento personal";
+    const etiqueta = area ? ` · ${area}` : " · sin especificar";
+    return { familia: fam, nombre: `Bono ${n || "?"} sesiones${etiqueta}`, sesiones: n };
+  }
+  if (t.includes("online")) return { familia: "Online", nombre: "Sesión online", sesiones: 1 };
+  if (t.includes("individual") || t.includes("sesion")) {
+    const fam = area || "Entrenamiento personal";
+    const seg = t.includes("seguimiento") ? "Seguimiento" : "Sesión individual";
+    return { familia: fam, nombre: `${seg} · ${area || "sin especificar"}`, sesiones: 1 };
+  }
+  return { familia: "Otros", nombre: raw.charAt(0).toUpperCase() + raw.slice(1), sesiones: null };
+}
+const TIPOS_GRUPALES = ["The Axis Club", "Performance Group", "Gambaru", "Grupo reducido"];
+function sessionTypeOf(title) {
+  const t = stripAccents(title || "");
+  if (t.includes("axis club") || t.includes("small group")) return "The Axis Club";
+  if (t.includes("performance")) return "Performance Group";
+  if (t.includes("gambaru")) return "Gambaru";
+  if (t.includes("grupo")) return "Grupo reducido";
+  if (t.includes("valoraci")) return "Valoración inicial";
+  if (t.includes("fisio")) return "Fisioterapia";
+  if (t.includes("nutri")) return "Nutrición";
+  if (t.includes("psic")) return "Psicología";
+  if (t.includes("online")) return "Online";
+  if (t.includes("entrenamiento") || t.includes("personal") || t.includes("individual") || /\bep\b/.test(t)) return "Entrenamiento personal";
+  const s = (title || "Sin tipo").trim();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function formatOf(s, tipo) {
+  const n = Math.max(0, s.booked || (s.client ? String(s.client).split(",").filter((x) => x.trim()).length : 0));
+  if (TIPOS_GRUPALES.includes(tipo)) return typeof s.capacity === "number" ? `Grupo de hasta ${s.capacity}` : "Grupo";
+  if (n === 0) return "Sin cliente";
+  return n <= 4 ? `${n} a 1` : `${n} personas`;
+}
+function minutesOf(s) {
+  const m = toMin(s.end) - toMin(s.start);
+  return m > 0 ? m : 0;
+}
+function isDone(s, today, nowMin) {
+  if (!s.date) return false;
+  if (s.date < today) return true;
+  if (s.date > today) return false;
+  return toMin(s.end) <= nowMin;
+}
+const card = { background: "#fff", border: `1px solid ${C_LINE}`, borderRadius: 12, padding: 16 };
+const h2s = { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" };
+const th = { padding: "8px 10px", borderBottom: `2px solid ${C_INK}`, fontSize: 12, color: C_MUTED, textAlign: "right", whiteSpace: "nowrap" };
+const td = { padding: "7px 10px", borderBottom: `1px solid ${C_SOFT}`, fontSize: 13, textAlign: "right", whiteSpace: "nowrap" };
+function Swatch({ color }) {
+  return /* @__PURE__ */ React.createElement("span", { style: { width: 10, height: 10, borderRadius: 3, background: color, display: "inline-block", flex: "none" } });
+}
+function Seg({ value, onChange, options }) {
+  return /* @__PURE__ */ React.createElement("span", { style: { display: "inline-flex", gap: 4, flexWrap: "wrap" } }, options.map(([v, l]) => /* @__PURE__ */ React.createElement("button", { key: v, className: `axis-btn ${value === v ? "primary" : "ghost"}`, style: { padding: "6px 12px" }, "aria-pressed": value === v, onClick: () => onChange(v) }, l)));
+}
+function statusOf(ratio, future) {
+  if (future) return { label: "Pendiente", icon: "○", color: C_MUTED };
+  if (ratio >= 1) return { label: "Cumplido", icon: "✓", color: C_GOOD };
+  if (ratio >= 0.7) return { label: "Cerca", icon: "▲", color: C_WARN };
+  return { label: "Por debajo", icon: "✕", color: C_BAD };
+}
+function StatusBadge({ st }) {
+  return /* @__PURE__ */ React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: st.color } }, /* @__PURE__ */ React.createElement("span", { "aria-hidden": "true" }, st.icon), st.label);
+}
+function Progress({ ratio, color, pace, height = 14 }) {
+  const w = Math.max(0, Math.min(1, ratio || 0)) * 100;
+  return /* @__PURE__ */ React.createElement("div", { style: { position: "relative", background: C_SOFT, borderRadius: 7, height, overflow: "visible" } }, /* @__PURE__ */ React.createElement("div", { style: { width: w + "%", height: "100%", background: color, borderRadius: 7, minWidth: ratio > 0 ? 4 : 0 } }), pace != null && pace > 0 && pace < 1 && /* @__PURE__ */ React.createElement("div", { title: "Ritmo esperado a día de hoy", style: { position: "absolute", left: `calc(${pace * 100}% - 1px)`, top: -4, bottom: -4, width: 2, background: C_INK } }));
+}
+function MoneyInput({ value, onChange, label, width = 130 }) {
+  const fmt = (v) => v == null ? "" : Number(v).toLocaleString("es-ES", { maximumFractionDigits: 0 });
+  const [txt, setTxt] = useState(fmt(value));
+  useEffect(() => {
+    setTxt(fmt(value));
+  }, [value]);
+  const commit = () => {
+    const clean = txt.replace(/[€\s.]/g, "").replace(",", ".");
+    if (clean === "") return onChange(null);
+    const n = parseFloat(clean);
+    if (!isNaN(n) && n >= 0) onChange(Math.round(n));
+    else setTxt(fmt(value));
+  };
+  return /* @__PURE__ */ React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ React.createElement(
+    "input",
+    {
+      className: "axis-input",
+      inputMode: "decimal",
+      "aria-label": label,
+      placeholder: "Sin objetivo",
+      value: txt,
+      style: { width, textAlign: "right" },
+      onChange: (e) => setTxt(e.target.value),
+      onBlur: commit,
+      onFocus: (e) => {
+        setTxt(value == null ? "" : String(value));
+        setTimeout(() => e.target.select(), 0);
+      },
+      onKeyDown: (e) => {
+        if (e.key === "Enter") e.target.blur();
+      }
+    }
+  ), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: C_MUTED } }, "€"));
+}
+function ObjetivosTab({ payments, coaches }) {
+  const hoy = todayISO();
+  const [year, setYear] = useState(Number(hoy.slice(0, 4)));
+  const [objetivos, setObjetivos] = useState(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem("axis-objetivos") || "{}") || {};
+    } catch (e) {
+      return {};
+    }
+  });
+  const [base, setBase] = useState(() => {
+    try {
+      return window.localStorage.getItem("axis-objetivos-base") || "fin";
+    } catch (e) {
+      return "fin";
+    }
+  });
+  const [mesSel, setMesSel] = useState(Number(hoy.slice(5, 7)));
+  const [hover, setHover] = useState(null);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("axis-objetivos", JSON.stringify(objetivos));
+    } catch (e) {
+    }
+  }, [objetivos]);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("axis-objetivos-base", base);
+    } catch (e) {
+    }
+  }, [base]);
+  const obj = objetivos[year] || { anual: null, meses: {} };
+  const setObj = (patch) => setObjetivos((prev) => {
+    const cur = prev[year] || { anual: null, meses: {} };
+    return { ...prev, [year]: { ...cur, ...patch, meses: { ...cur.meses, ...patch.meses || {} } } };
+  });
+  const setMes = (m, v) => setObjetivos((prev) => {
+    const cur = prev[year] || { anual: null, meses: {} };
+    return { ...prev, [year]: { ...cur, meses: { ...cur.meses, [m]: v } } };
+  });
+  const people = useMemo(() => buildPeople(coaches), [coaches]);
+  const data = useMemo(() => {
+    const meses = Array.from({ length: 12 }, () => ({ fin: 0, pen: 0, porPersona: {} }));
+    for (const p of payments) {
+      if (!p.d || Number(p.d.slice(0, 4)) !== year) continue;
+      const m = Number(p.d.slice(5, 7)) - 1;
+      if (m < 0 || m > 11) continue;
+      if (p.st === "fin") meses[m].fin += p.amt || 0;
+      else meses[m].pen += p.amt || 0;
+      if (base === "todos" || p.st === "fin") {
+        const k = personKeyOfPayment(p);
+        meses[m].porPersona[k] = (meses[m].porPersona[k] || 0) + (p.amt || 0);
+      }
+    }
+    const real = meses.map((x) => base === "todos" ? x.fin + x.pen : x.fin);
+    return { meses, real, totalReal: real.reduce((a, b) => a + b, 0) };
+  }, [payments, year, base]);
+  const yHoy = Number(hoy.slice(0, 4)), mHoy = Number(hoy.slice(5, 7));
+  const esFuturo = (m) => year > yHoy || year === yHoy && m > mHoy;
+  const esEnCurso = (m) => year === yHoy && m === mHoy;
+  const metaMes = (m) => obj.meses && obj.meses[m] != null ? obj.meses[m] : null;
+  const sumaMeses = Array.from({ length: 12 }, (_, i) => metaMes(i + 1) || 0).reduce((a, b) => a + b, 0);
+  const hayMeses = Array.from({ length: 12 }, (_, i) => metaMes(i + 1)).some((v) => v != null);
+  const anual = obj.anual != null ? obj.anual : hayMeses ? sumaMeses : null;
+  const anualDerivado = obj.anual == null && hayMeses;
+  let pace = null;
+  if (anual) {
+    if (year < yHoy) pace = 1;
+    else if (year > yHoy) pace = 0;
+    else {
+      const d = /* @__PURE__ */ new Date(hoy + "T12:00:00");
+      const diasMes = new Date(yHoy, mHoy, 0).getDate();
+      const frMes = d.getDate() / diasMes;
+      if (hayMeses) {
+        let acum = 0;
+        for (let m = 1; m < mHoy; m++) acum += metaMes(m) || 0;
+        acum += (metaMes(mHoy) || 0) * frMes;
+        pace = acum / anual;
+      } else {
+        const inicio = new Date(yHoy, 0, 1), fin = new Date(yHoy + 1, 0, 1);
+        pace = (d - inicio) / (fin - inicio);
+      }
+    }
+  }
+  const ratioAnual = anual ? data.totalReal / anual : 0;
+  const esperadoHoy = pace != null && anual ? anual * pace : null;
+  const difRitmo = esperadoHoy != null ? data.totalReal - esperadoHoy : null;
+  const mesesRestantes = year === yHoy ? 12 - mHoy + 1 : year > yHoy ? 12 : 0;
+  const falta = anual ? Math.max(0, anual - data.totalReal) : 0;
+  const repartir = () => {
+    if (!anual) return;
+    const each = Math.round(anual / 12);
+    const meses = {};
+    for (let m = 1; m <= 12; m++) meses[m] = m === 12 ? anual - each * 11 : each;
+    setObj({ anual, meses });
+  };
+  const copiarAnterior = () => {
+    const prev = objetivos[year - 1];
+    if (!prev) return;
+    setObjetivos((p) => ({ ...p, [year]: { anual: prev.anual, meses: { ...prev.meses } } }));
+  };
+  const W = 760, H = 240, PADL = 56, PADR = 12, PADT = 26, PADB = 30;
+  const maxV = Math.max(1, ...data.real, ...Array.from({ length: 12 }, (_, i) => metaMes(i + 1) || 0)) * 1.12;
+  const niceStep = (() => {
+    const raw = maxV / 4, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const n = raw / mag;
+    return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+  })();
+  const ticks = [];
+  for (let v = 0; v <= maxV; v += niceStep) ticks.push(v);
+  const yMax = ticks[ticks.length - 1] < maxV ? ticks[ticks.length - 1] + niceStep : ticks[ticks.length - 1];
+  if (ticks[ticks.length - 1] < yMax) ticks.push(yMax);
+  const plotW = W - PADL - PADR, plotH = H - PADT - PADB;
+  const colW = plotW / 12, barW = Math.min(30, colW * 0.5);
+  const y = (v) => PADT + plotH - v / yMax * plotH;
+  const mSel = data.meses[mesSel - 1];
+  const realSel = data.real[mesSel - 1];
+  const metaSel = metaMes(mesSel);
+  const personasSel = sortPeople(Object.keys(mSel.porPersona)).filter((k) => mSel.porPersona[k] > 0);
+  const maxPers = Math.max(1, ...personasSel.map((k) => mSel.porPersona[k]));
+  return /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 14 } }, /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setYear(year - 1), "aria-label": "Año anterior" }, "←"), /* @__PURE__ */ React.createElement("span", { className: "axis-display", style: { fontSize: 26, fontWeight: 700 } }, year), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setYear(year + 1), "aria-label": "Año siguiente" }, "→"), /* @__PURE__ */ React.createElement("span", { style: { marginLeft: 12, fontSize: 13, color: C_MUTED } }, "Cuenta como facturado:"), /* @__PURE__ */ React.createElement(Seg, { value: base, onChange: setBase, options: [["fin", "Solo cobrado"], ["todos", "Cobrado + pendiente"]] }), /* @__PURE__ */ React.createElement("span", { style: { marginLeft: "auto", fontSize: 12, color: C_MUTED } }, "Importes con IVA, igual que AimHarder")), /* @__PURE__ */ React.createElement("section", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 12 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: h2s }, "Objetivo anual ", year), /* @__PURE__ */ React.createElement(MoneyInput, { label: `Objetivo anual ${year}`, width: 150, value: obj.anual, onChange: (v) => setObj({ anual: v }) }), anualDerivado && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: C_MUTED } }, "Sin cifra anual: se usa la suma de los meses (", eur0(sumaMeses), ")"), obj.anual != null && hayMeses && Math.abs(sumaMeses - obj.anual) > 1 && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: C_WARN, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" } }, "⚠ Los objetivos mensuales suman ", eur0(sumaMeses), ", no ", eur0(obj.anual), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", style: { padding: "3px 9px", fontSize: 12 }, onClick: () => setObj({ anual: sumaMeses }) }, "Usar ", eur0(sumaMeses), " como anual"))), !anual ? /* @__PURE__ */ React.createElement("p", { style: { margin: 0, fontSize: 14, color: C_MUTED } }, "Escribe un objetivo anual o los objetivos de cada mes en la tabla de abajo. Llevas facturado ", /* @__PURE__ */ React.createElement("b", { style: { color: C_INK } }, eur0(data.totalReal)), " en ", year, ".") : /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gap: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 28, flexWrap: "wrap", alignItems: "flex-end" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C_MUTED } }, "Completado"), /* @__PURE__ */ React.createElement("div", { className: "axis-display", style: { fontSize: 46, fontWeight: 700, lineHeight: 1 } }, pct0(ratioAnual))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C_MUTED } }, "Facturado"), /* @__PURE__ */ React.createElement("div", { className: "axis-display", style: { fontSize: 26, fontWeight: 700 } }, eur0(data.totalReal)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C_MUTED } }, "de ", eur0(anual))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C_MUTED } }, "Falta"), /* @__PURE__ */ React.createElement("div", { className: "axis-display", style: { fontSize: 26, fontWeight: 700 } }, eur0(falta)), falta > 0 && mesesRestantes > 0 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C_MUTED } }, "≈ ", eur0(falta / mesesRestantes), " al mes (", mesesRestantes, " ", mesesRestantes === 1 ? "mes" : "meses", ")")), difRitmo != null && year === yHoy && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C_MUTED } }, "Frente al ritmo de hoy"), /* @__PURE__ */ React.createElement("div", { className: "axis-display", style: { fontSize: 26, fontWeight: 700, color: difRitmo >= 0 ? C_GOOD : C_BAD } }, difRitmo >= 0 ? "▲ +" : "▼ ", eur0(difRitmo)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C_MUTED } }, "esperado a hoy: ", eur0(esperadoHoy)))), /* @__PURE__ */ React.createElement(Progress, { ratio: ratioAnual, color: ratioAnual >= 1 ? C_GOOD : AXIS_COLOR, pace: year === yHoy ? pace : null, height: 18 }), year === yHoy && pace != null && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C_MUTED, display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { width: 2, height: 12, background: C_INK, display: "inline-block" } }), " línea negra = dónde deberías estar hoy para cumplir el objetivo", hayMeses ? " (según los objetivos mensuales)" : ""))), /* @__PURE__ */ React.createElement("section", { style: { ...card, overflowX: "auto" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: h2s }, "Facturación mensual frente al objetivo"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: C_MUTED, display: "inline-flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement(Swatch, { color: AXIS_COLOR }), " facturado", /* @__PURE__ */ React.createElement("span", { style: { width: 16, height: 2, background: C_INK, display: "inline-block", marginLeft: 10 } }), " objetivo del mes · pulsa un mes para ver el detalle")), /* @__PURE__ */ React.createElement("div", { style: { position: "relative", minWidth: 560 } }, /* @__PURE__ */ React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": `Facturación mensual de ${year} frente al objetivo`, style: { display: "block" } }, ticks.map((v) => /* @__PURE__ */ React.createElement("g", { key: v }, /* @__PURE__ */ React.createElement("line", { x1: PADL, x2: W - PADR, y1: y(v), y2: y(v), stroke: v === 0 ? "#B7C3BD" : "#EEF2F0", strokeWidth: "1" }), /* @__PURE__ */ React.createElement("text", { x: PADL - 8, y: y(v) + 4, textAnchor: "end", fontSize: "11", fill: C_MUTED }, v >= 1e3 ? (v / 1e3).toLocaleString("es-ES") + "k" : v))), data.real.map((v, i) => {
+    const m = i + 1, cx = PADL + colW * i + colW / 2;
+    const meta = metaMes(m);
+    const ratio = meta ? v / meta : null;
+    const sel = m === mesSel;
+    const fill = ratio != null && ratio >= 1 ? C_GOOD : AXIS_COLOR;
+    const barH = Math.max(v > 0 ? 2 : 0, v / yMax * plotH);
+    return /* @__PURE__ */ React.createElement(
+      "g",
+      {
+        key: m,
+        style: { cursor: "pointer" },
+        onClick: () => setMesSel(m),
+        onMouseEnter: () => setHover({ m, x: cx, v, meta }),
+        onMouseLeave: () => setHover(null)
+      },
+      /* @__PURE__ */ React.createElement("rect", { x: PADL + colW * i, y: PADT, width: colW, height: plotH, fill: sel ? "#F2F7F5" : "transparent" }),
+      barH > 0 && /* @__PURE__ */ React.createElement("path", { d: `M${cx - barW / 2},${y(0)} V${y(0) - barH + 4} Q${cx - barW / 2},${y(0) - barH} ${cx - barW / 2 + 4},${y(0) - barH} H${cx + barW / 2 - 4} Q${cx + barW / 2},${y(0) - barH} ${cx + barW / 2},${y(0) - barH + 4} V${y(0)} Z`, fill, opacity: esFuturo(m) ? 0.35 : 1 }),
+      meta != null && meta > 0 && /* @__PURE__ */ React.createElement("line", { x1: cx - barW / 2 - 7, x2: cx + barW / 2 + 7, y1: y(meta), y2: y(meta), stroke: C_INK, strokeWidth: "2", strokeLinecap: "round" }),
+      ratio != null && !esFuturo(m) && /* @__PURE__ */ React.createElement("text", { x: cx, y: Math.min(y(v), meta ? y(meta) : y(v)) - 7, textAnchor: "middle", fontSize: "11", fontWeight: "700", fill: C_INK }, pct0(ratio)),
+      /* @__PURE__ */ React.createElement("text", { x: cx, y: H - 10, textAnchor: "middle", fontSize: "12", fontWeight: sel ? 700 : 500, fill: sel ? C_INK : C_MUTED }, MESES_CORTOS[i])
+    );
+  })), hover && /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", left: `${hover.x / W * 100}%`, top: 0, transform: "translateX(-50%)", background: C_INK, color: "#fff", borderRadius: 8, padding: "6px 10px", fontSize: 12, pointerEvents: "none", whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,.2)" } }, /* @__PURE__ */ React.createElement("b", null, MESES_LARGOS[hover.m - 1]), " · ", eur0(hover.v), hover.meta ? ` de ${eur0(hover.meta)} (${pct0(hover.v / hover.meta)})` : " · sin objetivo"))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gap: 18, gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", alignItems: "start" } }, /* @__PURE__ */ React.createElement("section", { style: { ...card, overflowX: "auto" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { ...h2s, marginRight: "auto" } }, "Objetivos por mes"), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", style: { padding: "5px 10px", fontSize: 12 }, disabled: !obj.anual, onClick: repartir, title: "Divide el objetivo anual en 12 meses iguales" }, "Repartir anual en 12"), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", style: { padding: "5px 10px", fontSize: 12 }, disabled: !objetivos[year - 1], onClick: copiarAnterior }, "Copiar de ", year - 1)), /* @__PURE__ */ React.createElement("table", { style: { borderCollapse: "collapse", width: "100%" } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", { style: { ...th, textAlign: "left" } }, "Mes"), /* @__PURE__ */ React.createElement("th", { style: th }, "Objetivo"), /* @__PURE__ */ React.createElement("th", { style: th }, "Facturado"), /* @__PURE__ */ React.createElement("th", { style: th }, "%"), /* @__PURE__ */ React.createElement("th", { style: { ...th, textAlign: "left" } }, "Estado"))), /* @__PURE__ */ React.createElement("tbody", null, MESES_LARGOS.map((nombre, i) => {
+    const m = i + 1, meta = metaMes(m), v = data.real[i];
+    const ratio = meta ? v / meta : null;
+    const st = meta ? statusOf(ratio, esFuturo(m)) : null;
+    return /* @__PURE__ */ React.createElement("tr", { key: m, style: { background: m === mesSel ? "#F2F7F5" : void 0 } }, /* @__PURE__ */ React.createElement("td", { style: { ...td, textAlign: "left", fontWeight: 600, cursor: "pointer" }, onClick: () => setMesSel(m) }, nombre, esEnCurso(m) && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: C_MUTED, fontWeight: 500 } }, " · en curso")), /* @__PURE__ */ React.createElement("td", { style: { ...td, padding: "4px 10px" } }, /* @__PURE__ */ React.createElement(MoneyInput, { label: `Objetivo ${nombre} ${year}`, width: 96, value: meta, onChange: (val) => setMes(m, val) })), /* @__PURE__ */ React.createElement("td", { style: { ...td, color: v ? C_INK : "#B7C3BD" } }, esFuturo(m) && !v ? "—" : eur0(v)), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700 } }, ratio != null && !esFuturo(m) ? pct0(ratio) : "—"), /* @__PURE__ */ React.createElement("td", { style: { ...td, textAlign: "left" } }, st ? /* @__PURE__ */ React.createElement(StatusBadge, { st: esEnCurso(m) && ratio < 1 ? { label: "En curso", icon: "◔", color: C_WARN } : st }) : /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#9CA3AF" } }, "Sin objetivo")));
+  }), /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { style: { ...td, textAlign: "left", fontWeight: 700, borderTop: `2px solid ${C_INK}` } }, "Total"), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700, borderTop: `2px solid ${C_INK}` } }, hayMeses ? eur0(sumaMeses) : "—"), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700, borderTop: `2px solid ${C_INK}` } }, eur0(data.totalReal)), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700, borderTop: `2px solid ${C_INK}` } }, hayMeses && sumaMeses ? pct0(data.totalReal / sumaMeses) : "—"), /* @__PURE__ */ React.createElement("td", { style: { ...td, borderTop: `2px solid ${C_INK}` } }))))), /* @__PURE__ */ React.createElement("section", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", style: { padding: "4px 10px" }, onClick: () => setMesSel(mesSel === 1 ? 12 : mesSel - 1), "aria-label": "Mes anterior" }, "←"), /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { ...h2s, margin: 0 } }, MESES_LARGOS[mesSel - 1], " ", year), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", style: { padding: "4px 10px" }, onClick: () => setMesSel(mesSel === 12 ? 1 : mesSel + 1), "aria-label": "Mes siguiente" }, "→")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C_MUTED } }, "Facturado"), /* @__PURE__ */ React.createElement("div", { className: "axis-display", style: { fontSize: 28, fontWeight: 700 } }, eur0(realSel))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C_MUTED } }, "Objetivo"), /* @__PURE__ */ React.createElement("div", { className: "axis-display", style: { fontSize: 28, fontWeight: 700 } }, metaSel ? eur0(metaSel) : "—")), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C_MUTED } }, "Completado"), /* @__PURE__ */ React.createElement("div", { className: "axis-display", style: { fontSize: 28, fontWeight: 700 } }, metaSel ? pct0(realSel / metaSel) : "—"))), metaSel ? /* @__PURE__ */ React.createElement(Progress, { ratio: realSel / metaSel, color: realSel >= metaSel ? C_GOOD : AXIS_COLOR }) : null, metaSel && realSel < metaSel && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: C_MUTED, margin: "8px 0 0" } }, "Faltan ", /* @__PURE__ */ React.createElement("b", { style: { color: C_INK } }, eur0(metaSel - realSel)), " para el objetivo del mes."), metaSel && realSel >= metaSel && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: C_GOOD, margin: "8px 0 0", fontWeight: 600 } }, "✓ Objetivo superado en ", eur0(realSel - metaSel), "."), base === "fin" && mSel.pen > 0 && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: C_MUTED, margin: "6px 0 0" } }, "Además hay ", eur0(mSel.pen), " pendientes de cobro este mes."), /* @__PURE__ */ React.createElement("h3", { style: { fontSize: 13, margin: "16px 0 8px", color: C_MUTED, textTransform: "uppercase", letterSpacing: ".04em" } }, "Quién lo ha facturado"), personasSel.length === 0 ? /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: C_MUTED, margin: 0 } }, "Sin pagos este mes.") : /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gap: 7 } }, personasSel.map((k) => {
+    const p = people.get(k) || { short: CREATOR_LABELS[k] || k, color: "#6B7280" };
+    const v = mSel.porPersona[k];
+    return /* @__PURE__ */ React.createElement("div", { key: k, style: { display: "grid", gridTemplateColumns: "92px 1fr 120px", alignItems: "center", gap: 10 } }, /* @__PURE__ */ React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600 } }, /* @__PURE__ */ React.createElement(Swatch, { color: p.color }), p.short), /* @__PURE__ */ React.createElement("div", { style: { background: C_SOFT, borderRadius: 4, height: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { width: v / maxPers * 100 + "%", height: "100%", background: p.color, borderRadius: 4, minWidth: 3 } })), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, textAlign: "right" } }, /* @__PURE__ */ React.createElement("b", null, eur0(v)), " ", /* @__PURE__ */ React.createElement("span", { style: { color: C_MUTED, fontSize: 11 } }, realSel ? pct0(v / realSel) : "")));
+  })))), /* @__PURE__ */ React.createElement("p", { style: { margin: 0, fontSize: 12, color: C_MUTED } }, "Los objetivos se guardan en este navegador. Si otra persona del equipo quiere verlos, tiene que escribirlos también en el suyo."));
+}
+function PersonasTab({ payments, sessions, coaches, nowMin }) {
+  const hoy = todayISO();
+  const [periodo, setPeriodo] = useState("mes");
+  const [month, setMonth] = useState(hoy.slice(0, 7));
+  const [year, setYear] = useState(Number(hoy.slice(0, 4)));
+  const [estado, setEstado] = useState("fin");
+  const [sel, setSel] = useState("__equipo__");
+  const people = useMemo(() => buildPeople(coaches), [coaches]);
+  const prefix = periodo === "mes" ? month : String(year);
+  const etiquetaPeriodo = periodo === "mes" ? monthLabel(month) : `Año ${year}`;
+  const stats = useMemo(() => {
+    const per = {};
+    const get = (k) => per[k] = per[k] || { ventas: {}, nVentas: 0, importe: 0, sesVendidas: 0, tipos: {}, nSes: 0, nProg: 0, min: 0, asist: 0, clientes: /* @__PURE__ */ new Set() };
+    for (const p of payments) {
+      if (!(p.d || "").startsWith(prefix)) continue;
+      if (estado !== "todos" && p.st !== estado) continue;
+      const k = personKeyOfPayment(p);
+      const pr = productOf(p.co, p.cat);
+      const st = get(k);
+      const key = pr.familia + "|" + pr.nombre;
+      const v = st.ventas[key] = st.ventas[key] || { familia: pr.familia, nombre: pr.nombre, n: 0, importe: 0, sesiones: 0, sesionesConocidas: true };
+      v.n += 1;
+      v.importe += p.amt || 0;
+      if (pr.sesiones != null) v.sesiones += pr.sesiones;
+      else v.sesionesConocidas = false;
+      st.nVentas += 1;
+      st.importe += p.amt || 0;
+      if (pr.sesiones != null) st.sesVendidas += pr.sesiones;
+    }
+    for (const s of sessions) {
+      if (!(s.date || "").startsWith(prefix)) continue;
+      const k = personKeyOfSession(s, coaches);
+      const st = get(k);
+      const tipo = sessionTypeOf(s.title);
+      const fmt = formatOf(s, tipo);
+      const dur = minutesOf(s);
+      const done = isDone(s, hoy, nowMin);
+      const t = st.tipos[tipo] = st.tipos[tipo] || { tipo, n: 0, prog: 0, min: 0, asist: 0, filas: {} };
+      const fk = fmt + "|" + dur;
+      const f = t.filas[fk] = t.filas[fk] || { formato: fmt, dur, n: 0, prog: 0, asist: 0, plazas: 0 };
+      const asist = Math.max(0, s.booked || 0);
+      if (done) {
+        f.n += 1;
+        f.asist += asist;
+        if (typeof s.capacity === "number" && TIPOS_GRUPALES.includes(tipo)) f.plazas += s.capacity;
+        t.n += 1;
+        t.min += dur;
+        t.asist += asist;
+        st.nSes += 1;
+        st.min += dur;
+        st.asist += asist;
+        String(s.client || "").split(",").map((x) => x.trim()).filter(Boolean).forEach((c) => st.clientes.add(c));
+      } else {
+        f.prog += 1;
+        t.prog += 1;
+        st.nProg += 1;
+      }
+    }
+    return per;
+  }, [payments, sessions, coaches, prefix, estado, nowMin]);
+  const keys = sortPeople(Object.keys(stats).filter((k) => stats[k].nVentas || stats[k].nSes || stats[k].nProg));
+  const P = (k) => people.get(k) || { key: k, name: CREATOR_LABELS[k] || k, short: CREATOR_LABELS[k] || k, color: "#6B7280" };
+  const horas = (min) => (min / 60).toLocaleString("es-ES", { maximumFractionDigits: 1 }) + " h";
+  const totalImporte = keys.reduce((a, k) => a + stats[k].importe, 0);
+  const maxImp = Math.max(1, ...keys.map((k) => stats[k].importe));
+  const maxSes = Math.max(1, ...keys.map((k) => stats[k].nSes));
+  const prodRows = {}, tipoRows = {};
+  for (const k of keys) {
+    for (const v of Object.values(stats[k].ventas)) {
+      const r = prodRows[v.familia + "|" + v.nombre] = prodRows[v.familia + "|" + v.nombre] || { familia: v.familia, nombre: v.nombre, por: {}, n: 0 };
+      r.por[k] = (r.por[k] || 0) + v.n;
+      r.n += v.n;
+    }
+    for (const t of Object.values(stats[k].tipos)) {
+      const r = tipoRows[t.tipo] = tipoRows[t.tipo] || { tipo: t.tipo, por: {}, n: 0 };
+      r.por[k] = (r.por[k] || 0) + t.n;
+      r.n += t.n;
+    }
+  }
+  const famRank = (f) => FAMILIAS.indexOf(f) < 0 ? 99 : FAMILIAS.indexOf(f);
+  const prodList = Object.values(prodRows).sort((a, b) => famRank(a.familia) - famRank(b.familia) || b.n - a.n);
+  const tipoList = Object.values(tipoRows).filter((r) => r.n > 0).sort((a, b) => b.n - a.n);
+  const ventasKeys = keys.filter((k) => stats[k].nVentas);
+  const sesKeys = keys.filter((k) => stats[k].nSes);
+  const PersonHead = ({ k }) => /* @__PURE__ */ React.createElement("th", { style: { ...th, textAlign: "center" } }, /* @__PURE__ */ React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700, color: C_INK } }, /* @__PURE__ */ React.createElement(Swatch, { color: P(k).color }), P(k).short));
+  return /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 14 } }, /* @__PURE__ */ React.createElement(Seg, { value: periodo, onChange: setPeriodo, options: [["mes", "Mes"], ["anio", "Año"]] }), periodo === "mes" ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setMonth(shiftMonth(month, -1)), "aria-label": "Mes anterior" }, "←"), /* @__PURE__ */ React.createElement("input", { type: "month", className: "axis-input", style: { width: 160 }, value: month, onChange: (e) => e.target.value && setMonth(e.target.value) }), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setMonth(shiftMonth(month, 1)), "aria-label": "Mes siguiente" }, "→")) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setYear(year - 1), "aria-label": "Año anterior" }, "←"), /* @__PURE__ */ React.createElement("span", { className: "axis-display", style: { fontSize: 22, fontWeight: 700 } }, year), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setYear(year + 1), "aria-label": "Año siguiente" }, "→")), /* @__PURE__ */ React.createElement("span", { style: { marginLeft: 12, fontSize: 13, color: C_MUTED } }, "Ventas:"), /* @__PURE__ */ React.createElement(Seg, { value: estado, onChange: setEstado, options: [["fin", "Cobradas"], ["pen", "Pendientes"], ["todos", "Todas"]] })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, role: "tablist", "aria-label": "Persona" }, ["__equipo__", ...keys].map((k) => {
+    const on = sel === k;
+    const p = k === "__equipo__" ? { short: "Todo el equipo", color: C_INK } : P(k);
+    return /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        key: k,
+        role: "tab",
+        "aria-selected": on,
+        className: "axis-btn ghost",
+        onClick: () => setSel(k),
+        style: { padding: "6px 12px", display: "inline-flex", alignItems: "center", gap: 6, borderColor: on ? C_INK : "#C9D2CD", background: on ? C_INK : "#fff", color: on ? "#fff" : C_INK }
+      },
+      k !== "__equipo__" && /* @__PURE__ */ React.createElement(Swatch, { color: p.color }),
+      p.short
+    );
+  })), keys.length === 0 && /* @__PURE__ */ React.createElement("div", { style: { ...card, border: "1px dashed #C9D2CD", textAlign: "center", color: C_MUTED, padding: 40 } }, "No hay ventas ni sesiones en ", etiquetaPeriodo, ". Pulsa «Sincronizar ahora» en la pestaña Sesiones si acabas de abrir el panel."), keys.length > 0 && sel === "__equipo__" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("section", { style: { ...card, overflowX: "auto" } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: h2s }, "Resumen del equipo · ", etiquetaPeriodo), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 10px", fontSize: 12, color: C_MUTED } }, "Pulsa una persona para ver su detalle completo."), /* @__PURE__ */ React.createElement("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 760 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", { style: { ...th, textAlign: "left" } }, "Persona"), /* @__PURE__ */ React.createElement("th", { style: { ...th, textAlign: "left", width: "22%" } }, "Facturado"), /* @__PURE__ */ React.createElement("th", { style: th }, "Ventas"), /* @__PURE__ */ React.createElement("th", { style: th }, "Sesiones vendidas"), /* @__PURE__ */ React.createElement("th", { style: { ...th, textAlign: "left", width: "18%" } }, "Sesiones impartidas"), /* @__PURE__ */ React.createElement("th", { style: th }, "Horas"), /* @__PURE__ */ React.createElement("th", { style: th }, "Asistencias"), /* @__PURE__ */ React.createElement("th", { style: th }, "Programadas"))), /* @__PURE__ */ React.createElement("tbody", null, keys.map((k) => {
+    const s = stats[k], p = P(k);
+    return /* @__PURE__ */ React.createElement("tr", { key: k, style: { cursor: "pointer" }, onClick: () => setSel(k) }, /* @__PURE__ */ React.createElement("td", { style: { ...td, textAlign: "left", fontWeight: 700 } }, /* @__PURE__ */ React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement(Swatch, { color: p.color }), p.name)), /* @__PURE__ */ React.createElement("td", { style: { ...td, textAlign: "left" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 82px", gap: 8, alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { background: C_SOFT, borderRadius: 4, height: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { width: s.importe / maxImp * 100 + "%", height: "100%", background: p.color, borderRadius: 4, minWidth: s.importe ? 3 : 0 } })), /* @__PURE__ */ React.createElement("b", { style: { textAlign: "right" } }, eur0(s.importe)))), /* @__PURE__ */ React.createElement("td", { style: td }, s.nVentas || "–"), /* @__PURE__ */ React.createElement("td", { style: td }, s.sesVendidas || "–"), /* @__PURE__ */ React.createElement("td", { style: { ...td, textAlign: "left" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 34px", gap: 8, alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { background: C_SOFT, borderRadius: 4, height: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { width: s.nSes / maxSes * 100 + "%", height: "100%", background: p.color, borderRadius: 4, minWidth: s.nSes ? 3 : 0 } })), /* @__PURE__ */ React.createElement("b", { style: { textAlign: "right" } }, s.nSes || "–"))), /* @__PURE__ */ React.createElement("td", { style: td }, s.min ? horas(s.min) : "–"), /* @__PURE__ */ React.createElement("td", { style: td }, s.asist || "–"), /* @__PURE__ */ React.createElement("td", { style: { ...td, color: C_MUTED } }, s.nProg || "–"));
+  }), /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { style: { ...td, textAlign: "left", fontWeight: 700, borderTop: `2px solid ${C_INK}` } }, "Total"), /* @__PURE__ */ React.createElement("td", { style: { ...td, textAlign: "left", fontWeight: 800, borderTop: `2px solid ${C_INK}` } }, eur0(totalImporte)), ["nVentas", "sesVendidas", "nSes"].map((f) => /* @__PURE__ */ React.createElement("td", { key: f, style: { ...td, fontWeight: 700, borderTop: `2px solid ${C_INK}`, textAlign: f === "nSes" ? "left" : "right" } }, keys.reduce((a, k) => a + stats[k][f], 0))), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700, borderTop: `2px solid ${C_INK}` } }, horas(keys.reduce((a, k) => a + stats[k].min, 0))), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700, borderTop: `2px solid ${C_INK}` } }, keys.reduce((a, k) => a + stats[k].asist, 0)), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700, borderTop: `2px solid ${C_INK}`, color: C_MUTED } }, keys.reduce((a, k) => a + stats[k].nProg, 0)))))), prodList.length > 0 && /* @__PURE__ */ React.createElement("section", { style: { ...card, overflowX: "auto" } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: h2s }, "Productos vendidos por persona"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 10px", fontSize: 12, color: C_MUTED } }, "Número de ventas de cada producto (", estado === "fin" ? "cobradas" : estado === "pen" ? "pendientes" : "cobradas y pendientes", ")."), /* @__PURE__ */ React.createElement("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 520 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", { style: { ...th, textAlign: "left" } }, "Producto"), ventasKeys.map((k) => /* @__PURE__ */ React.createElement(PersonHead, { key: k, k })), /* @__PURE__ */ React.createElement("th", { style: th }, "Total"))), /* @__PURE__ */ React.createElement("tbody", null, prodList.map((r, i) => /* @__PURE__ */ React.createElement(React.Fragment, { key: r.familia + r.nombre }, (i === 0 || prodList[i - 1].familia !== r.familia) && /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { colSpan: ventasKeys.length + 2, style: { padding: "10px 10px 4px", fontSize: 11, fontWeight: 700, color: C_MUTED, textTransform: "uppercase", letterSpacing: ".05em" } }, r.familia)), /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { style: { ...td, textAlign: "left", fontWeight: 600 } }, r.nombre), ventasKeys.map((k) => /* @__PURE__ */ React.createElement("td", { key: k, style: { ...td, textAlign: "center", color: r.por[k] ? C_INK : "#C4CDC8" } }, r.por[k] || "–")), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700 } }, r.n))))))), tipoList.length > 0 && /* @__PURE__ */ React.createElement("section", { style: { ...card, overflowX: "auto" } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: h2s }, "Sesiones impartidas por persona"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 10px", fontSize: 12, color: C_MUTED } }, "Sesiones del calendario ya realizadas, por tipo. El detalle de formato (1 a 1, 2 a 1, grupo) y duración está en la ficha de cada persona."), /* @__PURE__ */ React.createElement("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 520 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", { style: { ...th, textAlign: "left" } }, "Tipo de sesión"), sesKeys.map((k) => /* @__PURE__ */ React.createElement(PersonHead, { key: k, k })), /* @__PURE__ */ React.createElement("th", { style: th }, "Total"))), /* @__PURE__ */ React.createElement("tbody", null, tipoList.map((r) => /* @__PURE__ */ React.createElement("tr", { key: r.tipo }, /* @__PURE__ */ React.createElement("td", { style: { ...td, textAlign: "left", fontWeight: 600 } }, r.tipo), sesKeys.map((k) => /* @__PURE__ */ React.createElement("td", { key: k, style: { ...td, textAlign: "center", color: r.por[k] ? C_INK : "#C4CDC8" } }, r.por[k] || "–")), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700 } }, r.n))))))), sel !== "__equipo__" && stats[sel] && (() => {
+    const s = stats[sel], p = P(sel);
+    const ventas = Object.values(s.ventas).sort((a, b) => famRank(a.familia) - famRank(b.familia) || b.importe - a.importe);
+    const tipos = Object.values(s.tipos).sort((a, b) => b.n - a.n || b.prog - a.prog);
+    const familias = [...new Set(ventas.map((v) => v.familia))];
+    const kpi = (label, value, sub) => /* @__PURE__ */ React.createElement("div", { style: { minWidth: 110 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C_MUTED } }, label), /* @__PURE__ */ React.createElement("div", { className: "axis-display", style: { fontSize: 28, fontWeight: 700, lineHeight: 1.1 } }, value), sub && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C_MUTED } }, sub));
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("section", { style: { ...card, borderLeft: `6px solid ${p.color}` } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: h2s }, p.name, " · ", etiquetaPeriodo), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 28, flexWrap: "wrap", marginTop: 10 } }, kpi("Facturado", eur0(s.importe), totalImporte ? `${pct0(s.importe / totalImporte)} del equipo` : null), kpi("Ventas", s.nVentas, s.nVentas ? `ticket medio ${eur0(s.importe / s.nVentas)}` : null), kpi("Sesiones vendidas", s.sesVendidas || "–", "incluidas en lo vendido"), kpi("Sesiones impartidas", s.nSes, s.nProg ? `+ ${s.nProg} programadas` : null), kpi("Horas", s.min ? horas(s.min) : "–"), kpi("Clientes distintos", s.clientes.size || "–", s.asist ? `${s.asist} asistencias` : null))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gap: 18, gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", alignItems: "start" } }, /* @__PURE__ */ React.createElement("section", { style: { ...card, overflowX: "auto" } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: h2s }, "Productos vendidos"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 10px", fontSize: 12, color: C_MUTED } }, "Según «Creado por» en AimHarder · ", estado === "fin" ? "cobradas" : estado === "pen" ? "pendientes" : "cobradas y pendientes"), ventas.length === 0 ? /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: C_MUTED, margin: 0 } }, "Sin ventas en ", etiquetaPeriodo, ".") : /* @__PURE__ */ React.createElement("table", { style: { borderCollapse: "collapse", width: "100%" } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", { style: { ...th, textAlign: "left" } }, "Producto"), /* @__PURE__ */ React.createElement("th", { style: th }, "Ventas"), /* @__PURE__ */ React.createElement("th", { style: th }, "Sesiones"), /* @__PURE__ */ React.createElement("th", { style: th }, "Importe"))), /* @__PURE__ */ React.createElement("tbody", null, familias.map((fam) => {
+      const vs = ventas.filter((v) => v.familia === fam);
+      const sub = vs.reduce((a, v) => ({ n: a.n + v.n, imp: a.imp + v.importe, ses: a.ses + v.sesiones }), { n: 0, imp: 0, ses: 0 });
+      return /* @__PURE__ */ React.createElement(React.Fragment, { key: fam }, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px 4px", fontSize: 11, fontWeight: 700, color: C_MUTED, textTransform: "uppercase", letterSpacing: ".05em" } }, fam), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px 4px", fontSize: 11, fontWeight: 700, color: C_MUTED, textAlign: "right" } }, sub.n), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px 4px", fontSize: 11, fontWeight: 700, color: C_MUTED, textAlign: "right" } }, sub.ses || ""), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px 4px", fontSize: 11, fontWeight: 700, color: C_MUTED, textAlign: "right" } }, eur0(sub.imp))), vs.map((v) => /* @__PURE__ */ React.createElement("tr", { key: v.nombre }, /* @__PURE__ */ React.createElement("td", { style: { ...td, textAlign: "left", paddingLeft: 18 } }, v.nombre), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700 } }, v.n), /* @__PURE__ */ React.createElement("td", { style: td }, v.sesionesConocidas && v.sesiones ? v.sesiones : "–"), /* @__PURE__ */ React.createElement("td", { style: td }, eur0(v.importe)))));
+    }), /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { style: { ...td, textAlign: "left", fontWeight: 700, borderTop: `2px solid ${C_INK}` } }, "Total"), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700, borderTop: `2px solid ${C_INK}` } }, s.nVentas), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700, borderTop: `2px solid ${C_INK}` } }, s.sesVendidas || "–"), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 800, borderTop: `2px solid ${C_INK}` } }, eur0(s.importe)))))), /* @__PURE__ */ React.createElement("section", { style: { ...card, overflowX: "auto" } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: h2s }, "Sesiones impartidas"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 10px", fontSize: 12, color: C_MUTED } }, "Del calendario de AimHarder · por tipo, formato y duración"), tipos.length === 0 ? /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: C_MUTED, margin: 0 } }, "Sin sesiones en ", etiquetaPeriodo, ".") : /* @__PURE__ */ React.createElement("table", { style: { borderCollapse: "collapse", width: "100%" } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", { style: { ...th, textAlign: "left" } }, "Tipo · formato"), /* @__PURE__ */ React.createElement("th", { style: th }, "Duración"), /* @__PURE__ */ React.createElement("th", { style: th }, "Hechas"), /* @__PURE__ */ React.createElement("th", { style: th }, "Asist."), /* @__PURE__ */ React.createElement("th", { style: th }, "Ocupación"), /* @__PURE__ */ React.createElement("th", { style: th }, "Programadas"))), /* @__PURE__ */ React.createElement("tbody", null, tipos.map((t) => {
+      const filas = Object.values(t.filas).sort((a, b) => b.n - a.n || b.prog - a.prog);
+      return /* @__PURE__ */ React.createElement(React.Fragment, { key: t.tipo }, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px 4px", fontSize: 11, fontWeight: 700, color: C_MUTED, textTransform: "uppercase", letterSpacing: ".05em" } }, t.tipo), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px 4px", fontSize: 11, fontWeight: 700, color: C_MUTED, textAlign: "right" } }, t.min ? horas(t.min) : ""), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px 4px", fontSize: 11, fontWeight: 700, color: C_MUTED, textAlign: "right" } }, t.n), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px 4px", fontSize: 11, fontWeight: 700, color: C_MUTED, textAlign: "right" } }, t.asist || ""), /* @__PURE__ */ React.createElement("td", null), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px 4px", fontSize: 11, fontWeight: 700, color: C_MUTED, textAlign: "right" } }, t.prog || "")), filas.map((f) => /* @__PURE__ */ React.createElement("tr", { key: f.formato + f.dur }, /* @__PURE__ */ React.createElement("td", { style: { ...td, textAlign: "left", paddingLeft: 18 } }, f.formato), /* @__PURE__ */ React.createElement("td", { style: td }, f.dur, " min"), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700 } }, f.n || "–"), /* @__PURE__ */ React.createElement("td", { style: td }, f.asist || "–"), /* @__PURE__ */ React.createElement("td", { style: td, title: f.plazas ? `${f.asist} de ${f.plazas} plazas ocupadas` : void 0 }, f.plazas ? pct0(f.asist / f.plazas) : "–"), /* @__PURE__ */ React.createElement("td", { style: { ...td, color: C_MUTED } }, f.prog || "–"))));
+    }), /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { style: { ...td, textAlign: "left", fontWeight: 700, borderTop: `2px solid ${C_INK}` } }, "Total"), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700, borderTop: `2px solid ${C_INK}` } }, s.min ? horas(s.min) : "–"), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700, borderTop: `2px solid ${C_INK}` } }, s.nSes), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700, borderTop: `2px solid ${C_INK}` } }, s.asist || "–"), /* @__PURE__ */ React.createElement("td", { style: { ...td, borderTop: `2px solid ${C_INK}` } }), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700, borderTop: `2px solid ${C_INK}`, color: C_MUTED } }, s.nProg || "–")))))));
+  })(), /* @__PURE__ */ React.createElement("p", { style: { margin: 0, fontSize: 12, color: C_MUTED } }, "Ventas: se atribuyen a quien registró el cobro en AimHarder («Creado por»); lo creado por la cuenta del centro o el administrador va a Axis. Sesiones: se atribuyen al coach de la sesión en el calendario. «2 a 1» = 2 clientes con un mismo profesional."));
+}
+
 function AxisPanel() {
   const [coaches, setCoaches] = useState(DEFAULT_COACHES);
   const [rooms, setRooms] = useState(DEFAULT_ROOMS);
@@ -424,7 +886,9 @@ function AxisPanel() {
   const [boxCfg, setBoxCfg] = useState({ sub: "axishealthyperfomance", boxId: "" });
   useEffect(() => {
     (async () => {
-      setCoaches(await loadKey("axis-coaches", DEFAULT_COACHES));
+      const savedCoaches = await loadKey("axis-coaches", DEFAULT_COACHES);
+      const faltan = DEFAULT_COACHES.filter((d) => !savedCoaches.some((c) => c.id === d.id));
+      setCoaches(faltan.length ? [...savedCoaches, ...faltan] : savedCoaches);
       setRooms(await loadKey("axis-rooms", DEFAULT_ROOMS));
       setSessions(await loadKey("axis-sessions", []));
       const storedPay = await loadKey("axis-payments", null);
@@ -591,10 +1055,12 @@ function AxisPanel() {
     });
   }
   const payStats = useMemo(() => {
-    const inMonth = payments.filter((p) => (p.d || "").startsWith(month));
+    // El titular se recalcula desde el "Creado por" original (cr), así la regla
+    // Axis/Marc se aplica también a pagos guardados en el navegador antes del cambio.
+    const inMonth = payments.filter((p) => (p.d || "").startsWith(month)).map((p) => p.cr != null ? { ...p, c: creatorId(p.cr) } : p);
     const filtered = payFilter === "todos" ? inMonth : inMonth.filter((p) => p.st === payFilter);
     const cols = [...new Set(filtered.map((p) => p.c))].sort(
-      (a, b) => ["marc", "eric", "sergio", "marti", "marina", "axis"].indexOf(a) - ["marc", "eric", "sergio", "marti", "marina", "axis"].indexOf(b)
+      (a, b) => (CREATOR_ORDER.indexOf(a) + 1 || 99) - (CREATOR_ORDER.indexOf(b) + 1 || 99)
     );
     const cats = /* @__PURE__ */ new Set();
     const matrix = {};
@@ -823,7 +1289,7 @@ function AxisPanel() {
     @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap');
     .axis-root { font-family:'Barlow',system-ui,sans-serif; background:#F2F4F3; min-height:100vh; color:#12211B; }
     .axis-display { font-family:'Barlow Condensed','Barlow',sans-serif; letter-spacing:.02em; }
-    .axis-tab { border:none; background:transparent; padding:10px 14px; font:600 14px 'Barlow'; color:#5A6B63; cursor:pointer; border-bottom:3px solid transparent; }
+    .axis-tab { white-space:nowrap; flex:none; border:none; background:transparent; padding:10px 14px; font:600 14px 'Barlow'; color:#5A6B63; cursor:pointer; border-bottom:3px solid transparent; }
     .axis-tab.on { color:#12211B; border-bottom-color:#12211B; }
     .axis-btn { border:none; border-radius:8px; padding:9px 14px; font:600 13px 'Barlow'; cursor:pointer; }
     .axis-btn:focus-visible, .axis-tab:focus-visible { outline:2px solid #2563EB; outline-offset:2px; }
@@ -843,7 +1309,7 @@ function AxisPanel() {
     var _a;
     return ((_a = coachOf(s)) == null ? void 0 : _a.name) || s.coachRaw || "\xBFCoach?";
   };
-  return /* @__PURE__ */ React.createElement("div", { className: "axis-root" }, /* @__PURE__ */ React.createElement("style", null, css), /* @__PURE__ */ React.createElement("header", { style: { background: "#12211B", color: "#fff", padding: "18px 22px 0" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("h1", { className: "axis-display", style: { margin: 0, fontSize: 30, fontWeight: 700, textTransform: "uppercase" } }, "Axis \xB7 Panel de salas"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#9DB4A9" } }, "Horarios por sala \xB7 exporta a Google Calendar / Outlook")), /* @__PURE__ */ React.createElement("nav", { style: { marginTop: 10, display: "flex" } }, [["horario", "Horario"], ["sesiones", "Sesiones e import"], ["stats", "Resumen mensual"], ["equipo", "Equipo y salas"]].map(([id, label]) => /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement("div", { className: "axis-root" }, /* @__PURE__ */ React.createElement("style", null, css), /* @__PURE__ */ React.createElement("header", { style: { background: "#12211B", color: "#fff", padding: "18px 22px 0" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("h1", { className: "axis-display", style: { margin: 0, fontSize: 30, fontWeight: 700, textTransform: "uppercase" } }, "Axis \xB7 Panel de salas"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#9DB4A9" } }, "Horarios por sala \xB7 exporta a Google Calendar / Outlook")), /* @__PURE__ */ React.createElement("nav", { style: { marginTop: 10, display: "flex", overflowX: "auto", WebkitOverflowScrolling: "touch" } }, [["horario", "Horario"], ["sesiones", "Sesiones e import"], ["stats", "Resumen mensual"], ["objetivos", "Objetivos"], ["personas", "Por persona"], ["equipo", "Equipo y salas"]].map(([id, label]) => /* @__PURE__ */ React.createElement(
     "button",
     {
       key: id,
@@ -1012,7 +1478,7 @@ function AxisPanel() {
       label
     )))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#5A6B63" } }, "Cobrado en ", monthLabel(month)), /* @__PURE__ */ React.createElement("div", { className: "axis-display", style: { fontSize: 30, fontWeight: 700 } }, eur(payStats.sumFin)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#5A6B63" } }, payStats.nFin, " pago(s)")), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#5A6B63" } }, "Pendiente de cobro"), /* @__PURE__ */ React.createElement("div", { className: "axis-display", style: { fontSize: 30, fontWeight: 700, color: payStats.sumPen > 0 ? "#B45309" : "#12211B" } }, eur(payStats.sumPen)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#5A6B63" } }, payStats.nPen, " pago(s)"))), payStats.n === 0 ? /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: "#5A6B63" } }, "No hay pagos ", payFilter === "fin" ? "cobrados" : payFilter === "pen" ? "pendientes" : "", " en ", monthLabel(month), ".") : /* @__PURE__ */ React.createElement("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 560 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", { style: { padding: "8px 10px", borderBottom: "2px solid #12211B", fontSize: 12, color: "#5A6B63", textAlign: "left" } }, "Producto"), payStats.cols.map((c) => {
       var _a;
-      return /* @__PURE__ */ React.createElement("th", { key: c, style: { padding: "8px 10px", borderBottom: "2px solid #12211B", fontSize: 12, fontWeight: 700, textAlign: "right" } }, /* @__PURE__ */ React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { width: 10, height: 10, borderRadius: 3, background: ((_a = coaches.find((x) => x.id === c)) == null ? void 0 : _a.color) || "#3A4A42", display: "inline-block" } }), CREATOR_LABELS[c] || c));
+      return /* @__PURE__ */ React.createElement("th", { key: c, style: { padding: "8px 10px", borderBottom: "2px solid #12211B", fontSize: 12, fontWeight: 700, textAlign: "right" } }, /* @__PURE__ */ React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { width: 10, height: 10, borderRadius: 3, background: c === "axis" ? AXIS_COLOR : ((_a = coaches.find((x) => x.id === c)) == null ? void 0 : _a.color) || "#3A4A42", display: "inline-block" } }), CREATOR_LABELS[c] || c));
     }), /* @__PURE__ */ React.createElement("th", { style: { padding: "8px 10px", borderBottom: "2px solid #12211B", fontSize: 12, textAlign: "right" } }, "Total"))), /* @__PURE__ */ React.createElement("tbody", null, payStats.orderedCats.map((cat) => {
       const row = payStats.matrix[cat] || {};
       const rowAmt = Object.values(row).reduce((a, x) => a + x.amt, 0);
@@ -1021,8 +1487,8 @@ function AxisPanel() {
     }), /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, fontWeight: 700 } }, "Total"), payStats.cols.map((c) => {
       var _a, _b;
       return /* @__PURE__ */ React.createElement("td", { key: c, style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, textAlign: "right", fontWeight: 700 } }, eur(((_a = payStats.totals[c]) == null ? void 0 : _a.amt) || 0), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#5A6B63" } }, "(", ((_b = payStats.totals[c]) == null ? void 0 : _b.n) || 0, ")"));
-    }), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, textAlign: "right", fontWeight: 800 } }, eur(payStats.grand), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#5A6B63" } }, "(", payStats.n, ")"))))), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: "#5A6B63", marginBottom: 0 } }, '"Creado por" indica qui\xE9n registr\xF3 el cobro, no necesariamente qui\xE9n dio la sesi\xF3n. Los pagos de la cuenta "Axis (gen\xE9rico)" no permiten atribuir la venta a Marc, Mart\xED o Marina individualmente.')));
-  })(), tab === "equipo" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18, maxWidth: 760 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Equipo"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 12px", fontSize: 13, color: "#5A6B63" } }, "El email es el que se a\xF1adir\xE1 como invitado dentro del archivo .ics. Sin email, el evento se genera igualmente pero sin invitado."), coaches.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: c.id, style: { display: "grid", gridTemplateColumns: "36px 110px 150px 1fr auto", gap: 8, alignItems: "center", marginBottom: 8 } }, /* @__PURE__ */ React.createElement(
+    }), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, textAlign: "right", fontWeight: 800 } }, eur(payStats.grand), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#5A6B63" } }, "(", payStats.n, ")"))))), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: "#5A6B63", marginBottom: 0 } }, '"Creado por" indica qui\xE9n registr\xF3 el cobro, no necesariamente qui\xE9n dio la sesi\xF3n. La columna "Axis" re\xFAne los pagos creados con la cuenta del centro (Axis Health & Performance) o por el administrador: son ingresos del centro y no se suman a Marc, igual que en el Excel del plan financiero.')));
+  })(), tab === "objetivos" && /* @__PURE__ */ React.createElement(ObjetivosTab, { payments, coaches }), tab === "personas" && /* @__PURE__ */ React.createElement(PersonasTab, { payments, sessions, coaches, nowMin }), tab === "equipo" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18, maxWidth: 760 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Equipo"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 12px", fontSize: 13, color: "#5A6B63" } }, "El email es el que se a\xF1adir\xE1 como invitado dentro del archivo .ics. Sin email, el evento se genera igualmente pero sin invitado."), coaches.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: c.id, style: { display: "grid", gridTemplateColumns: "36px 110px 150px 1fr auto", gap: 8, alignItems: "center", marginBottom: 8 } }, /* @__PURE__ */ React.createElement(
     "input",
     {
       type: "color",
