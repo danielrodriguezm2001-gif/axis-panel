@@ -78,10 +78,11 @@ function categorize(title) {
   return title.trim().charAt(0).toUpperCase() + title.trim().slice(1);
 }
 const eur = (n) => n.toLocaleString("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
-// REGLA (29/09/2026): Axis es una entidad propia, igual que un coach.
+// REGLA: Axis es una entidad propia desde el inicio, igual que un coach.
 // Los pagos creados por "Axis Health & Performance", por el administrador o
 // por cualquier usuario que no sea un coach conocido van a "Axis", NUNCA a Marc.
-// Es la misma regla que aplica el Excel del plan financiero (bloque "Axis (centro)").
+// Es la misma regla que aplica el Excel del plan financiero (secciones "Axis (centro)" y "Axis Club").
+// Las cuotas de The Axis Club van siempre a Axis (ver personKeyOfPayment).
 const CREATOR_LABELS = { marc: "Marc", erik: "Erik", daniel: "Daniel", sergio: "Sergio", marti: "Mart\xED", marina: "Marina", axis: "Axis" };
 const CREATOR_ORDER = ["marc", "erik", "sergio", "daniel", "marti", "marina", "axis"];
 const AXIS_COLOR = "#2F6F6D";
@@ -415,6 +416,8 @@ function personKeyOfCoach(c) {
   return k === "axis" ? "c:" + c.id : k;
 }
 function personKeyOfPayment(p) {
+  // Las cuotas de The Axis Club se quedan siempre en el centro, las cree quien las cree.
+  if (stripAccents(p.co || "").includes("axis club")) return "axis";
   const k = p.cr != null ? creatorId(p.cr) : p.c;
   return k === "eric" ? "erik" : k;
 }
@@ -1057,7 +1060,7 @@ function AxisPanel() {
   const payStats = useMemo(() => {
     // El titular se recalcula desde el "Creado por" original (cr), así la regla
     // Axis/Marc se aplica también a pagos guardados en el navegador antes del cambio.
-    const inMonth = payments.filter((p) => (p.d || "").startsWith(month)).map((p) => p.cr != null ? { ...p, c: creatorId(p.cr) } : p);
+    const inMonth = payments.filter((p) => (p.d || "").startsWith(month)).map((p) => ({ ...p, c: personKeyOfPayment(p) }));
     const filtered = payFilter === "todos" ? inMonth : inMonth.filter((p) => p.st === payFilter);
     const cols = [...new Set(filtered.map((p) => p.c))].sort(
       (a, b) => (CREATOR_ORDER.indexOf(a) + 1 || 99) - (CREATOR_ORDER.indexOf(b) + 1 || 99)
