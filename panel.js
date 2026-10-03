@@ -130,48 +130,6 @@ function parseAimHarderPayments(payments) {
   }
   return out;
 }
-function parsePaymentsCSV(text) {
-  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length < 2) return [];
-  const parseLine = (l) => {
-    const cells = [];
-    let cur = "", inQ = false;
-    for (const ch of l) {
-      if (ch === '"') inQ = !inQ;
-      else if (ch === ";" && !inQ) {
-        cells.push(cur);
-        cur = "";
-      } else cur += ch;
-    }
-    cells.push(cur);
-    return cells.map((c) => c.trim());
-  };
-  const header = parseLine(lines[0]).map(stripAccents);
-  const idx = (names) => header.findIndex((h) => names.some((n) => h.includes(n)));
-  const iId = idx(["id"]), iCl = idx(["cliente"]), iCon = idx(["concepto"]), iAmt = idx(["cantidad", "importe"]), iEst = idx(["estado"]), iFec = idx(["fecha"]), iCre = idx(["creado"]);
-  const isPending = iEst === -1 && iFec !== -1;
-  const out = [];
-  for (const line of lines.slice(1)) {
-    const c = parseLine(line);
-    if (!c[iId]) continue;
-    const amount = parseFloat((c[iAmt] || "0").replace(/€/g, "").replace(/\./g, "").replace(",", ".")) || 0;
-    const estado = iEst !== -1 ? c[iEst] : "";
-    const met = (estado.match(/^([A-Za-zÁ-ú]+)/) || [])[1] || "";
-    out.push({
-      id: c[iId],
-      cl: c[iCl] || "",
-      cat: catFromConcept(c[iCon] || ""),
-      amt: amount,
-      c: creatorId(c[iCre] || ""),
-      cr: c[iCre] || "",
-      co: c[iCon] || "",
-      d: dmyToISO(isPending ? c[iFec] : estado),
-      st: isPending ? "pen" : "fin",
-      met: isPending ? "" : met
-    });
-  }
-  return out.filter((p) => p.d);
-}
 const monthLabel = (ym) => {
   try {
     const d = /* @__PURE__ */ new Date(ym + "-15T12:00:00");
@@ -1012,8 +970,6 @@ function AxisPanel() {
   const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState({});
   const [sendState, setSendState] = useState({ status: "idle", msg: "" });
-  const [importText, setImportText] = useState("");
-  const [importPreview, setImportPreview] = useState(null);
   const [importError, setImportError] = useState("");
   const [nowMin, setNowMin] = useState(() => {
     const d = /* @__PURE__ */ new Date();
@@ -1022,14 +978,8 @@ function AxisPanel() {
   const [month, setMonth] = useState(todayISO().slice(0, 7));
   const [payments, setPayments] = useState([]);
   const [payFilter, setPayFilter] = useState("fin");
-  const [payCsvText, setPayCsvText] = useState("");
-  const [payImportMsg, setPayImportMsg] = useState("");
-  const [ahTokens, setAhTokens] = useState({ access: "", refresh: "" });
-  const [syncState, setSyncState] = useState({ status: "idle", msg: "" });
-  const [quickDate, setQuickDate] = useState(todayISO());
   const [autoSyncUrl, setAutoSyncUrl] = useState("");
   const [autoSyncState, setAutoSyncState] = useState({ status: "idle", msg: "" });
-  const [boxCfg, setBoxCfg] = useState({ sub: "axishealthyperfomance", boxId: "" });
   useEffect(() => {
     (async () => {
       const savedCoaches = await loadKey("axis-coaches", DEFAULT_COACHES);
@@ -1039,8 +989,6 @@ function AxisPanel() {
       setSessions(await loadKey("axis-sessions", []));
       const storedPay = await loadKey("axis-payments", null);
       setPayments(storedPay && storedPay.length ? storedPay : PAYMENTS_SEED);
-      setAhTokens(await loadKey("axis-ah-tokens", { access: "", refresh: "" }));
-      setBoxCfg(await loadKey("axis-box-cfg", { sub: "axishealthyperfomance", boxId: "" }));
       setAutoSyncUrl(await loadKey("axis-autosync-url", ""));
       setLoaded(true);
     })();
@@ -1063,26 +1011,8 @@ function AxisPanel() {
     if (loaded) saveKey("axis-payments", payments);
   }, [payments, loaded]);
   useEffect(() => {
-    if (loaded && (ahTokens.access || ahTokens.refresh)) saveKey("axis-ah-tokens", ahTokens);
-  }, [ahTokens, loaded]);
-  useEffect(() => {
-    if (loaded && (boxCfg.sub || boxCfg.boxId)) saveKey("axis-box-cfg", boxCfg);
-  }, [boxCfg, loaded]);
-  useEffect(() => {
     if (loaded && autoSyncUrl) saveKey("axis-autosync-url", autoSyncUrl);
   }, [autoSyncUrl, loaded]);
-  const AH_BASE = "https://api.aimharder.com/api";
-  const boxReady = boxCfg.sub.trim().length > 0;
-  const bookingsUrl = (iso) => `https://${boxCfg.sub.trim().toLowerCase()}.aimharder.com/api/coachBookings?appointments=1&day=${iso.replaceAll("-", "")}&_=${Date.now()}`;
-  async function ahFetch(path, token) {
-    const res = await fetch(`${AH_BASE}${path}`, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) {
-      const err = new Error(`HTTP ${res.status}`);
-      err.status = res.status;
-      throw err;
-    }
-    return res.json();
-  }
   async function handleAutoSync(silent) {
     if (!autoSyncUrl.trim()) return;
     if (!silent) setAutoSyncState({ status: "sync", msg: "Descargando datos actualizados\u2026" });
@@ -1145,61 +1075,6 @@ function AxisPanel() {
   useEffect(() => {
     if (loaded && autoSyncUrl.trim()) handleAutoSync(true);
   }, [loaded]);
-  async function handleSyncMonth() {
-    if (!ahTokens.access) {
-      setSyncState({ status: "error", msg: "Pega primero tu Access Token en el campo de arriba." });
-      return;
-    }
-    setSyncState({ status: "sync", msg: "Probando conexi\xF3n directa con AimHarder\u2026" });
-    const [y, m] = month.split("-").map(Number);
-    const daysInMonth = new Date(y, m, 0).getDate();
-    const dates = Array.from({ length: daysInMonth }, (_, i) => `${y}-${pad(m)}-${pad(i + 1)}`);
-    try {
-      await ahFetch(`/calendar/${dates[0]}`, ahTokens.access);
-    } catch (e) {
-      if (e.message === "Failed to fetch" || e instanceof TypeError) {
-        setSyncState({
-          status: "error",
-          msg: "Tu navegador ha bloqueado la conexi\xF3n directa a AimHarder (restricci\xF3n de seguridad de tu navegador, no un fallo tuyo ni del token). Usa el importador de JSON/CSV de m\xE1s abajo, que s\xED funciona siempre."
-        });
-        return;
-      }
-      if (e.status === 401 || e.status === 410) {
-        setSyncState({ status: "error", msg: "El Access Token ha caducado o no es v\xE1lido. Pide uno nuevo en AimHarder (Configuraci\xF3n > API) y p\xE9galo de nuevo." });
-        return;
-      }
-      setSyncState({ status: "error", msg: `AimHarder respondi\xF3 con un error (${e.message}). Usa el importador manual mientras tanto.` });
-      return;
-    }
-    let allRecords = [];
-    let failed = 0;
-    for (const d of dates) {
-      try {
-        const json = await ahFetch(`/calendar/${d}`, ahTokens.access);
-        allRecords = allRecords.concat(parseAimHarder(json, d, coaches, rooms));
-      } catch (e) {
-        failed++;
-      }
-    }
-    setSessions((prev) => {
-      const map = new Map(prev.map((s) => [s.id, s]));
-      for (const s of allRecords) {
-        const old = map.get(s.id);
-        if (!old) {
-          map.set(s.id, s);
-          continue;
-        }
-        const kept = {};
-        for (const k of old.manualKeys || []) if (k in old) kept[k] = old[k];
-        map.set(s.id, { ...s, sent: old.sent, manualKeys: old.manualKeys, ...kept });
-      }
-      return [...map.values()];
-    });
-    setSyncState({
-      status: "done",
-      msg: `Sincronizado ${monthLabel(month)}: ${allRecords.length} sesi\xF3n(es) importadas${failed ? `, ${failed} d\xEDa(s) no se pudieron leer` : ""}.`
-    });
-  }
   const payStats = useMemo(() => {
     // El titular se recalcula desde el "Creado por" original (cr), así la regla
     // Axis/Marc se aplica también a pagos guardados en el navegador antes del cambio.
@@ -1230,35 +1105,6 @@ function AxisPanel() {
     const grand = filtered.reduce((a, p) => a + p.amt, 0);
     return { cols, matrix, totals, orderedCats, sumFin, sumPen, grand, nFin: inMonth.filter((p) => p.st === "fin").length, nPen: inMonth.filter((p) => p.st === "pen").length, n: filtered.length };
   }, [payments, month, payFilter]);
-  function handleImportPayments() {
-    setPayImportMsg("");
-    try {
-      const parsed = parsePaymentsCSV(payCsvText);
-      if (!parsed.length) {
-        setPayImportMsg("No he reconocido pagos en ese texto. Pega el CSV tal cual lo exporta AimHarder (con cabecera y punto y coma).");
-        return;
-      }
-      setPayments((prev) => {
-        const map = new Map(prev.map((p) => [p.id, p]));
-        let nuevos = 0, actualizados = 0;
-        for (const p of parsed) {
-          const old = map.get(p.id);
-          if (!old) {
-            map.set(p.id, p);
-            nuevos++;
-          } else if (old.st === "pen" && p.st === "fin") {
-            map.set(p.id, p);
-            actualizados++;
-          } else map.set(p.id, { ...old, ...p });
-        }
-        setPayImportMsg(`Importados ${nuevos} pago(s) nuevo(s)${actualizados ? ` y ${actualizados} pendiente(s) marcados como cobrados` : ""}. Total en el panel: ${map.size}.`);
-        return [...map.values()];
-      });
-      setPayCsvText("");
-    } catch (e) {
-      setPayImportMsg("Error al leer el CSV: " + e.message);
-    }
-  }
   const daySessions = useMemo(
     () => sessions.filter((s) => s.date === date).sort((a, b) => toMin(a.start) - toMin(b.start)),
     [sessions, date]
@@ -1331,39 +1177,6 @@ function AxisPanel() {
   }, [sessions, month, coaches]);
   const selectedIds = Object.keys(selected).filter((k) => selected[k]);
   const selectedSessions = daySessions.filter((s) => selectedIds.includes(s.id));
-  function handlePreview() {
-    setImportError("");
-    setImportPreview(null);
-    try {
-      const json = JSON.parse(importText);
-      const parsed = parseAimHarder(json, date, coaches, rooms);
-      if (!parsed.length) {
-        setImportError("No he encontrado sesiones en ese JSON. Comprueba que sea la respuesta del endpoint de calendario/citas.");
-        return;
-      }
-      setImportPreview(parsed);
-    } catch (e) {
-      setImportError("El texto no es JSON v\xE1lido: " + e.message);
-    }
-  }
-  function handleImport() {
-    var _a;
-    if (!importPreview) return;
-    setSessions((prev) => {
-      const existing = new Set(prev.map((s) => s.id));
-      const nuevos = importPreview.filter((s) => !existing.has(s.id));
-      const actualizados = prev.map((s) => {
-        const upd = importPreview.find((p) => p.id === s.id);
-        return upd ? { ...upd, sent: s.sent } : s;
-      });
-      return [...actualizados, ...nuevos];
-    });
-    const firstDate = (_a = importPreview[0]) == null ? void 0 : _a.date;
-    if (firstDate) setDate(firstDate);
-    setImportPreview(null);
-    setImportText("");
-    setTab("horario");
-  }
   function handleSend(toSend) {
     if (!toSend.length) return;
     try {
@@ -1455,7 +1268,7 @@ function AxisPanel() {
     var _a;
     return ((_a = coachOf(s)) == null ? void 0 : _a.name) || s.coachRaw || "\xBFCoach?";
   };
-  return /* @__PURE__ */ React.createElement("div", { className: "axis-root" }, /* @__PURE__ */ React.createElement("style", null, css), /* @__PURE__ */ React.createElement("header", { style: { background: "#12211B", color: "#fff", padding: "18px 22px 0" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("h1", { className: "axis-display", style: { margin: 0, fontSize: 30, fontWeight: 700, textTransform: "uppercase" } }, "Axis \xB7 Panel de salas"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#9DB4A9" } }, "Horarios por sala \xB7 exporta a Google Calendar / Outlook")), /* @__PURE__ */ React.createElement("nav", { style: { marginTop: 10, display: "flex", overflowX: "auto", WebkitOverflowScrolling: "touch" } }, [["horario", "Horario"], ["sesiones", "Sesiones e import"], ["stats", "Resumen mensual"], ["objetivos", "Objetivos"], ["personas", "Por persona"], ["equipo", "Equipo y salas"]].map(([id, label]) => /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement("div", { className: "axis-root" }, /* @__PURE__ */ React.createElement("style", null, css), /* @__PURE__ */ React.createElement("header", { style: { background: "#12211B", color: "#fff", padding: "18px 22px 0" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("h1", { className: "axis-display", style: { margin: 0, fontSize: 30, fontWeight: 700, textTransform: "uppercase" } }, "Axis \xB7 Panel de salas"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#9DB4A9" } }, "Horarios por sala \xB7 exporta a Google Calendar / Outlook")), /* @__PURE__ */ React.createElement("nav", { style: { marginTop: 10, display: "flex", overflowX: "auto", WebkitOverflowScrolling: "touch" } }, [["horario", "Horario"], ["sesiones", "Sincronizaci\xF3n"], ["stats", "Resumen mensual"], ["objetivos", "Objetivos"], ["personas", "Por persona"], ["equipo", "Equipo y salas"]].map(([id, label]) => /* @__PURE__ */ React.createElement(
     "button",
     {
       key: id,
@@ -1481,7 +1294,7 @@ function AxisPanel() {
     "Descargar .ics del d\xEDa (",
     daySessions.filter((s) => !s.sent).length,
     ")"
-  ))), !daySessions.length ? /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", border: "1px dashed #C9D2CD", borderRadius: 12, padding: 40, textAlign: "center", color: "#5A6B63" } }, "No hay sesiones para este d\xEDa. Importa el JSON de AimHarder en la pesta\xF1a ", /* @__PURE__ */ React.createElement("b", null, "Sesiones e import"), " o a\xF1ade una sesi\xF3n manual.") : /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: `56px repeat(${rooms.length}, 1fr)`, background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: { borderBottom: "2px solid #12211B" } }), rooms.map((r) => /* @__PURE__ */ React.createElement("div", { key: r.id, className: "axis-display", style: { padding: "10px 12px", fontSize: 18, fontWeight: 700, textTransform: "uppercase", borderBottom: "2px solid #12211B", borderLeft: "1px solid #EDF1EF" } }, r.name, /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Barlow", fontSize: 12, fontWeight: 500, color: "#5A6B63", marginLeft: 8 } }, daySessions.filter((s) => s.roomId === r.id).length, " sesiones"))), /* @__PURE__ */ React.createElement("div", { style: { position: "relative", height: totalH } }, hours.map((h) => /* @__PURE__ */ React.createElement("div", { key: h, style: { position: "absolute", top: (h - DAY_START) * 60 * PX_PER_MIN - 7, right: 8, fontSize: 11, color: "#8A978F" } }, pad(h), ":00"))), rooms.map((r) => /* @__PURE__ */ React.createElement("div", { key: r.id, style: { position: "relative", height: totalH, borderLeft: "1px solid #EDF1EF" } }, hours.map((h) => /* @__PURE__ */ React.createElement("div", { key: h, style: { position: "absolute", top: (h - DAY_START) * 60 * PX_PER_MIN, left: 0, right: 0, borderTop: "1px solid #EDF1EF" } })), date === todayISO() && nowMin >= DAY_START * 60 && nowMin <= DAY_END * 60 && /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: (nowMin - DAY_START * 60) * PX_PER_MIN, left: 0, right: 0, borderTop: "2px solid #E11D48", zIndex: 3 } }), daySessions.filter((s) => s.roomId === r.id).map((s) => {
+  ))), !daySessions.length ? /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", border: "1px dashed #C9D2CD", borderRadius: 12, padding: 40, textAlign: "center", color: "#5A6B63" } }, "No hay sesiones para este d\xEDa. Pulsa \xABSincronizar ahora\xBB en la pesta\xF1a ", /* @__PURE__ */ React.createElement("b", null, "Sincronizaci\xF3n"), " o a\xF1ade una sesi\xF3n manual.") : /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: `56px repeat(${rooms.length}, 1fr)`, background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: { borderBottom: "2px solid #12211B" } }), rooms.map((r) => /* @__PURE__ */ React.createElement("div", { key: r.id, className: "axis-display", style: { padding: "10px 12px", fontSize: 18, fontWeight: 700, textTransform: "uppercase", borderBottom: "2px solid #12211B", borderLeft: "1px solid #EDF1EF" } }, r.name, /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Barlow", fontSize: 12, fontWeight: 500, color: "#5A6B63", marginLeft: 8 } }, daySessions.filter((s) => s.roomId === r.id).length, " sesiones"))), /* @__PURE__ */ React.createElement("div", { style: { position: "relative", height: totalH } }, hours.map((h) => /* @__PURE__ */ React.createElement("div", { key: h, style: { position: "absolute", top: (h - DAY_START) * 60 * PX_PER_MIN - 7, right: 8, fontSize: 11, color: "#8A978F" } }, pad(h), ":00"))), rooms.map((r) => /* @__PURE__ */ React.createElement("div", { key: r.id, style: { position: "relative", height: totalH, borderLeft: "1px solid #EDF1EF" } }, hours.map((h) => /* @__PURE__ */ React.createElement("div", { key: h, style: { position: "absolute", top: (h - DAY_START) * 60 * PX_PER_MIN, left: 0, right: 0, borderTop: "1px solid #EDF1EF" } })), date === todayISO() && nowMin >= DAY_START * 60 && nowMin <= DAY_END * 60 && /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: (nowMin - DAY_START * 60) * PX_PER_MIN, left: 0, right: 0, borderTop: "2px solid #E11D48", zIndex: 3 } }), daySessions.filter((s) => s.roomId === r.id).map((s) => {
     const top = Math.max(0, (toMin(s.start) - DAY_START * 60) * PX_PER_MIN);
     const h = Math.max(26, (toMin(s.end) - toMin(s.start)) * PX_PER_MIN - 2);
     return /* @__PURE__ */ React.createElement(
@@ -1501,7 +1314,7 @@ function AxisPanel() {
       h > 40 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, opacity: 0.9, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" } }, s.title, s.client ? ` \xB7 ${s.client}` : ""),
       h > 40 && capacityBadge(s)
     );
-  })))), selectedSessions.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 12, display: "flex", gap: 10, alignItems: "center" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, selectedSessions.length, " sesi\xF3n(es) seleccionada(s) (toca los bloques para seleccionar)"), /* @__PURE__ */ React.createElement("button", { className: "axis-btn primary", disabled: sendState.status === "sending", onClick: () => handleSend(selectedSessions) }, "Descargar .ics de la selecci\xF3n"), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setSelected({}) }, "Quitar selecci\xF3n"))), tab === "sesiones" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "2px solid #12211B", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 6px", fontSize: 20, textTransform: "uppercase" } }, "Sincronizaci\xF3n autom\xE1tica (recomendado)"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 10px", fontSize: 13, color: "#5A6B63" } }, "Pega aqu\xED la URL que te da el script ", /* @__PURE__ */ React.createElement("code", null, "sync_axis.py"), " una sola vez. A partir de ah\xED, cada vez que abras este panel se actualizar\xE1n solas las sesiones Y los pagos (pesta\xF1a Resumen mensual), sin copiar ni pegar nada m\xE1s. Si borras algo en AimHarder, tambi\xE9n desaparece de aqu\xED en la siguiente sincronizaci\xF3n."), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement(
+  })))), selectedSessions.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 12, display: "flex", gap: 10, alignItems: "center" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, selectedSessions.length, " sesi\xF3n(es) seleccionada(s) (toca los bloques para seleccionar)"), /* @__PURE__ */ React.createElement("button", { className: "axis-btn primary", disabled: sendState.status === "sending", onClick: () => handleSend(selectedSessions) }, "Descargar .ics de la selecci\xF3n"), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setSelected({}) }, "Quitar selecci\xF3n"))), tab === "sesiones" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "2px solid #12211B", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 6px", fontSize: 20, textTransform: "uppercase" } }, "Sincronizaci\xF3n autom\xE1tica"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 10px", fontSize: 13, color: "#5A6B63" } }, "Pega aqu\xED la URL que te da el script ", /* @__PURE__ */ React.createElement("code", null, "sync_axis.py"), " una sola vez. A partir de ah\xED, cada vez que abras este panel se actualizar\xE1n solas las sesiones Y los pagos (pesta\xF1a Resumen mensual), sin copiar ni pegar nada m\xE1s. Si borras algo en AimHarder, tambi\xE9n desaparece de aqu\xED en la siguiente sincronizaci\xF3n."), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement(
     "input",
     {
       className: "axis-input",
@@ -1510,91 +1323,7 @@ function AxisPanel() {
       value: autoSyncUrl,
       onChange: (e) => setAutoSyncUrl(e.target.value)
     }
-  ), /* @__PURE__ */ React.createElement("button", { className: "axis-btn primary", onClick: () => handleAutoSync(false), disabled: !autoSyncUrl.trim() || autoSyncState.status === "sync" }, autoSyncState.status === "sync" ? "Sincronizando\u2026" : "Sincronizar ahora")), autoSyncState.status !== "idle" && /* @__PURE__ */ React.createElement("p", { style: { marginTop: 10, fontSize: 13, color: autoSyncState.status === "error" ? "#9B1C1C" : "#1F3A2A" } }, autoSyncState.status === "sync" ? "\u23F3 " : autoSyncState.status === "done" ? "\u2705 " : "\u26A0\uFE0F ", autoSyncState.msg)), /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16, opacity: 0.85 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 6px", fontSize: 20, textTransform: "uppercase" } }, "Sincronizaci\xF3n directa con AimHarder (respaldo)"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 10px", fontSize: 13, color: "#5A6B63" } }, 'Pega aqu\xED tus tokens de la API una sola vez (se guardan solo en este navegador). Al pulsar "Sincronizar", el panel intenta traer directamente las sesiones del mes seleccionado (', monthLabel(month), "). Si tu navegador bloquea la conexi\xF3n te lo dir\xE1 claramente, y seguir\xE1s pudiendo usar el importador manual de m\xE1s abajo."), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, /* @__PURE__ */ React.createElement(
-    "input",
-    {
-      className: "axis-input",
-      type: "password",
-      placeholder: "Access Token",
-      value: ahTokens.access,
-      onChange: (e) => setAhTokens((p) => ({ ...p, access: e.target.value }))
-    }
-  ), /* @__PURE__ */ React.createElement(
-    "input",
-    {
-      className: "axis-input",
-      type: "password",
-      placeholder: "Refresh Token",
-      value: ahTokens.refresh,
-      onChange: (e) => setAhTokens((p) => ({ ...p, refresh: e.target.value }))
-    }
-  )), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10 } }, /* @__PURE__ */ React.createElement("button", { className: "axis-btn primary", onClick: handleSyncMonth, disabled: syncState.status === "sync" }, syncState.status === "sync" ? "Sincronizando\u2026" : `Sincronizar ${monthLabel(month)}`)), syncState.status !== "idle" && /* @__PURE__ */ React.createElement("p", { style: { marginTop: 10, fontSize: 13, color: syncState.status === "error" ? "#9B1C1C" : "#1F3A2A" } }, syncState.status === "sync" ? "\u23F3 " : syncState.status === "done" ? "\u2705 " : "\u26A0\uFE0F ", syncState.msg)), /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 6px", fontSize: 20, textTransform: "uppercase" } }, "Importar desde AimHarder (JSON manual)"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 10px", fontSize: 13, color: "#5A6B63" } }, /* @__PURE__ */ React.createElement("b", null, "Configuraci\xF3n (solo la primera vez):"), " escribe el subdominio de Axis en AimHarder \u2014 la palabra que va justo antes de ", /* @__PURE__ */ React.createElement("code", null, ".aimharder.com"), " en tu barra de direcciones cuando tienes abierto el horario."), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 } }, /* @__PURE__ */ React.createElement(
-    "input",
-    {
-      className: "axis-input",
-      style: { width: 260 },
-      placeholder: "subdominio (p. ej. axishealthyperfomance)",
-      value: boxCfg.sub,
-      onChange: (e) => setBoxCfg((p) => ({ ...p, sub: e.target.value }))
-    }
-  )), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 10px", fontSize: 13, color: "#5A6B63" } }, /* @__PURE__ */ React.createElement("b", null, "Paso 1:"), " pulsa el d\xEDa (la fecha se pone sola). Se abre AimHarder con las sesiones de ese d\xEDa en formato texto \u2014 necesitas tener la sesi\xF3n de AimHarder iniciada en este navegador. ", /* @__PURE__ */ React.createElement("b", null, "Paso 2:"), " selecciona todo (Ctrl+A), copia (Ctrl+C) y p\xE9galo en el cuadro de abajo. Puedes repetir con varios d\xEDas: el panel acumula sin duplicar."), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 12 } }, Array.from({ length: 7 }, (_, i) => {
-    const dIso = shiftDay(todayISO(), i);
-    const label = i === 0 ? "Hoy" : i === 1 ? "Ma\xF1ana" : (/* @__PURE__ */ new Date(dIso + "T12:00:00")).toLocaleDateString("es-ES", { weekday: "short", day: "numeric" }).replace(/^./, (c) => c.toUpperCase());
-    return /* @__PURE__ */ React.createElement(
-      "a",
-      {
-        key: dIso,
-        className: "axis-btn ghost",
-        target: "_blank",
-        rel: "noreferrer",
-        href: boxReady ? bookingsUrl(dIso) : void 0,
-        style: { textDecoration: "none", display: "inline-block", opacity: boxReady ? 1 : 0.45, pointerEvents: boxReady ? "auto" : "none" },
-        title: boxReady ? `Abrir sesiones del ${dIso} en AimHarder` : "Rellena antes el subdominio y el ID del box"
-      },
-      label
-    );
-  }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#5A6B63" } }, "\xB7 u otro d\xEDa:"), /* @__PURE__ */ React.createElement(
-    "input",
-    {
-      className: "axis-input",
-      type: "date",
-      style: { width: 150 },
-      value: quickDate,
-      onChange: (e) => setQuickDate(e.target.value),
-      "aria-label": "Elegir otro d\xEDa para abrir en AimHarder"
-    }
-  ), /* @__PURE__ */ React.createElement(
-    "a",
-    {
-      className: "axis-btn primary",
-      target: "_blank",
-      rel: "noreferrer",
-      href: boxReady && quickDate ? bookingsUrl(quickDate) : void 0,
-      style: { textDecoration: "none", display: "inline-block", opacity: boxReady && quickDate ? 1 : 0.45, pointerEvents: boxReady && quickDate ? "auto" : "none" }
-    },
-    "Abrir ese d\xEDa"
-  )), !boxReady && /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 10px", fontSize: 13, color: "#9B1C1C" } }, "Los botones se activar\xE1n al escribir el subdominio de arriba (se guarda y no tendr\xE1s que volver a ponerlo)."), /* @__PURE__ */ React.createElement(
-    "textarea",
-    {
-      className: "axis-input",
-      rows: 7,
-      value: importText,
-      onChange: (e) => setImportText(e.target.value),
-      placeholder: '[{"start":"2026-07-13T09:00","end":"2026-07-13T10:00","coach":"Marc","room":"Sala 1","name":"Sesi\xF3n individual","client":"..."}]'
-    }
-  ), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, display: "flex", gap: 10 } }, /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: handlePreview, disabled: !importText.trim() }, "Previsualizar"), importPreview && /* @__PURE__ */ React.createElement("button", { className: "axis-btn primary", onClick: handleImport }, "Importar ", importPreview.length, " sesi\xF3n(es)")), importError && /* @__PURE__ */ React.createElement("p", { style: { color: "#9B1C1C", fontSize: 13 } }, importError), importPreview && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, fontSize: 13 } }, importPreview.slice(0, 8).map((s) => {
-    var _a;
-    return /* @__PURE__ */ React.createElement("div", { key: s.id, style: { padding: "4px 0", borderBottom: "1px solid #EDF1EF" } }, s.date, " \xB7 ", s.start, "\u2013", s.end, " \xB7 ", /* @__PURE__ */ React.createElement("b", null, s.coachRaw || "\xBFcoach?"), " \xB7 ", (_a = rooms.find((r) => r.id === s.roomId)) == null ? void 0 : _a.name, s.roomGuessed ? " (asignada por defecto)" : "", " \xB7 ", s.title);
-  }), importPreview.length > 8 && /* @__PURE__ */ React.createElement("div", { style: { color: "#5A6B63", paddingTop: 4 } }, "\u2026y ", importPreview.length - 8, " m\xE1s"))), /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 6px", fontSize: 20, textTransform: "uppercase" } }, "Importar pagos (CSV) \u2014 respaldo manual"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 10px", fontSize: 13, color: "#5A6B63" } }, 'Los pagos ya se sincronizan solos junto con las sesiones (misma URL configurada en la pesta\xF1a Sesiones): si borras algo en AimHarder, tambi\xE9n desaparece de aqu\xED en la siguiente sincronizaci\xF3n. Usa este cuadro solo si necesitas forzar una carga manual puntual, pegando el export de AimHarder ("Pagos finalizados" o "Pagos pendientes", separado por punto y coma). Ahora mismo hay ', /* @__PURE__ */ React.createElement("b", null, payments.length), " pagos cargados."), /* @__PURE__ */ React.createElement(
-    "textarea",
-    {
-      className: "axis-input",
-      rows: 5,
-      value: payCsvText,
-      onChange: (e) => setPayCsvText(e.target.value),
-      placeholder: '"ID";"Cliente";"Correo electr\xF3nico";...;"Concepto";"Cantidad";"Estado";"Creado por"'
-    }
-  ), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10 } }, /* @__PURE__ */ React.createElement("button", { className: "axis-btn primary", onClick: handleImportPayments, disabled: !payCsvText.trim() }, "Importar pagos")), payImportMsg && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: payImportMsg.startsWith("Error") || payImportMsg.startsWith("No he") ? "#9B1C1C" : "#1F3A2A" } }, payImportMsg)), /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: 0, fontSize: 20, textTransform: "uppercase" } }, "Sesiones del ", fmtDateHuman(date)), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: addManual }, "+ A\xF1adir")), !daySessions.length && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: "#5A6B63" } }, "Sin sesiones este d\xEDa."), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gap: 8, marginTop: 10 } }, daySessions.map((s) => /* @__PURE__ */ React.createElement("div", { key: s.id, style: { display: "grid", gridTemplateColumns: "70px 70px 1fr 1fr 1fr 1fr 60px", gap: 6, alignItems: "center", fontSize: 13 } }, /* @__PURE__ */ React.createElement("input", { className: "axis-input", type: "time", value: s.start, onChange: (e) => updateSession(s.id, { start: e.target.value }) }), /* @__PURE__ */ React.createElement("input", { className: "axis-input", type: "time", value: s.end, onChange: (e) => updateSession(s.id, { end: e.target.value }) }), /* @__PURE__ */ React.createElement("select", { className: "axis-input", value: s.coachId || "", onChange: (e) => updateSession(s.id, { coachId: e.target.value || null }) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "(", s.coachRaw || "sin coach", ")"), coaches.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, c.name))), /* @__PURE__ */ React.createElement("select", { className: "axis-input", value: s.roomId, onChange: (e) => updateSession(s.id, { roomId: e.target.value }) }, rooms.map((r) => /* @__PURE__ */ React.createElement("option", { key: r.id, value: r.id }, r.name))), /* @__PURE__ */ React.createElement("input", { className: "axis-input", value: s.title, onChange: (e) => updateSession(s.id, { title: e.target.value }), placeholder: "Actividad" }), /* @__PURE__ */ React.createElement("input", { className: "axis-input", value: s.client || "", onChange: (e) => updateSession(s.id, { client: e.target.value }), placeholder: "Cliente" }), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => deleteSession(s.id), "aria-label": "Eliminar sesi\xF3n" }, "\u{1F5D1}")))))), tab === "stats" && (() => {
+  ), /* @__PURE__ */ React.createElement("button", { className: "axis-btn primary", onClick: () => handleAutoSync(false), disabled: !autoSyncUrl.trim() || autoSyncState.status === "sync" }, autoSyncState.status === "sync" ? "Sincronizando\u2026" : "Sincronizar ahora")), autoSyncState.status !== "idle" && /* @__PURE__ */ React.createElement("p", { style: { marginTop: 10, fontSize: 13, color: autoSyncState.status === "error" ? "#9B1C1C" : "#1F3A2A" } }, autoSyncState.status === "sync" ? "\u23F3 " : autoSyncState.status === "done" ? "\u2705 " : "\u26A0\uFE0F ", autoSyncState.msg)), /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: 0, fontSize: 20, textTransform: "uppercase" } }, "Sesiones del ", fmtDateHuman(date)), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: addManual }, "+ A\xF1adir")), !daySessions.length && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: "#5A6B63" } }, "Sin sesiones este d\xEDa."), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gap: 8, marginTop: 10 } }, daySessions.map((s) => /* @__PURE__ */ React.createElement("div", { key: s.id, style: { display: "grid", gridTemplateColumns: "70px 70px 1fr 1fr 1fr 1fr 60px", gap: 6, alignItems: "center", fontSize: 13 } }, /* @__PURE__ */ React.createElement("input", { className: "axis-input", type: "time", value: s.start, onChange: (e) => updateSession(s.id, { start: e.target.value }) }), /* @__PURE__ */ React.createElement("input", { className: "axis-input", type: "time", value: s.end, onChange: (e) => updateSession(s.id, { end: e.target.value }) }), /* @__PURE__ */ React.createElement("select", { className: "axis-input", value: s.coachId || "", onChange: (e) => updateSession(s.id, { coachId: e.target.value || null }) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "(", s.coachRaw || "sin coach", ")"), coaches.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, c.name))), /* @__PURE__ */ React.createElement("select", { className: "axis-input", value: s.roomId, onChange: (e) => updateSession(s.id, { roomId: e.target.value }) }, rooms.map((r) => /* @__PURE__ */ React.createElement("option", { key: r.id, value: r.id }, r.name))), /* @__PURE__ */ React.createElement("input", { className: "axis-input", value: s.title, onChange: (e) => updateSession(s.id, { title: e.target.value }), placeholder: "Actividad" }), /* @__PURE__ */ React.createElement("input", { className: "axis-input", value: s.client || "", onChange: (e) => updateSession(s.id, { client: e.target.value }), placeholder: "Cliente" }), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => deleteSession(s.id), "aria-label": "Eliminar sesi\xF3n" }, "\u{1F5D1}")))))), tab === "stats" && (() => {
     const colName = (id) => {
       var _a;
       return id === "__none__" ? "Sin asignar" : ((_a = coaches.find((c) => c.id === id)) == null ? void 0 : _a.name) || id;
@@ -1613,7 +1342,7 @@ function AxisPanel() {
       const row = monthStats.matrix[cat] || {};
       const rowTotal = Object.values(row).reduce((a, b) => a + b, 0);
       return /* @__PURE__ */ React.createElement("tr", { key: cat }, /* @__PURE__ */ React.createElement("td", { style: { ...cell, textAlign: "left", fontWeight: 600 } }, cat), monthStats.colIds.map((id) => /* @__PURE__ */ React.createElement("td", { key: id, style: { ...cell, color: row[id] ? "#12211B" : "#C4CDC8" } }, row[id] || "\u2013")), /* @__PURE__ */ React.createElement("td", { style: { ...cell, fontWeight: 700 } }, rowTotal));
-    }), /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { style: { ...cell, textAlign: "left", fontWeight: 700, borderTop: "2px solid #12211B" } }, "Total"), monthStats.colIds.map((id) => /* @__PURE__ */ React.createElement("td", { key: id, style: { ...cell, fontWeight: 700, borderTop: "2px solid #12211B" } }, monthStats.totalsByCoach[id] || 0)), /* @__PURE__ */ React.createElement("td", { style: { ...cell, fontWeight: 800, borderTop: "2px solid #12211B" } }, monthStats.total)))), monthStats.hasUnassigned && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: "#9B1C1C", marginBottom: 0 } }, 'Hay sesiones sin coach asignado: as\xEDgnalas en "Sesiones e import" para que cuenten a su profesional.'), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: "#5A6B63", marginBottom: 0 } }, "El tipo de producto se detecta del nombre de la actividad (individual, pack 4/8, small group o grupo, online, valoraci\xF3n, fisio). Lo no reconocido aparece con su propio nombre."))), /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16, overflowX: "auto" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: 0, fontSize: 20, textTransform: "uppercase" } }, "Facturaci\xF3n \xB7 pagos AimHarder"), /* @__PURE__ */ React.createElement("span", { style: { display: "flex", gap: 6, marginLeft: "auto" } }, [["fin", "Cobrados"], ["pen", "Pendientes"], ["todos", "Todos"]].map(([id, label]) => /* @__PURE__ */ React.createElement(
+    }), /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { style: { ...cell, textAlign: "left", fontWeight: 700, borderTop: "2px solid #12211B" } }, "Total"), monthStats.colIds.map((id) => /* @__PURE__ */ React.createElement("td", { key: id, style: { ...cell, fontWeight: 700, borderTop: "2px solid #12211B" } }, monthStats.totalsByCoach[id] || 0)), /* @__PURE__ */ React.createElement("td", { style: { ...cell, fontWeight: 800, borderTop: "2px solid #12211B" } }, monthStats.total)))), monthStats.hasUnassigned && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: "#9B1C1C", marginBottom: 0 } }, 'Hay sesiones sin coach asignado: as\xEDgnalas en "Sincronizaci\xF3n" (Sesiones del d\xEDa) para que cuenten a su profesional.'), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: "#5A6B63", marginBottom: 0 } }, "El tipo de producto se detecta del nombre de la actividad (individual, pack 4/8, small group o grupo, online, valoraci\xF3n, fisio). Lo no reconocido aparece con su propio nombre."))), /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16, overflowX: "auto" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: 0, fontSize: 20, textTransform: "uppercase" } }, "Facturaci\xF3n \xB7 pagos AimHarder"), /* @__PURE__ */ React.createElement("span", { style: { display: "flex", gap: 6, marginLeft: "auto" } }, [["fin", "Cobrados"], ["pen", "Pendientes"], ["todos", "Todos"]].map(([id, label]) => /* @__PURE__ */ React.createElement(
       "button",
       {
         key: id,
