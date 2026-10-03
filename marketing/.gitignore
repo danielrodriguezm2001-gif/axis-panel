@@ -1,0 +1,3 @@
+# Los exports de AimHarder, Instagram, etc. contienen datos personales de clientes: nunca al repositorio
+datos/*
+!datos/README.md
