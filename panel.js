@@ -1013,7 +1013,7 @@ function AxisPanel() {
   useEffect(() => {
     if (loaded) saveKey("axis-sync-key", syncKey);
   }, [syncKey, loaded]);
-  async function handleAutoSync(silent) {
+  async function handleAutoSync(silent, realStarted) {
     if (!autoSyncUrl.trim()) return;
     if (!silent) setAutoSyncState({ status: "sync", msg: "Descargando datos actualizados\u2026" });
     try {
@@ -1071,10 +1071,18 @@ function AxisPanel() {
         }
       }
 
-      setAutoSyncState({
-        status: "done",
-        msg: `\xDAltima sincronizaci\xF3n: ${(/* @__PURE__ */ new Date()).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })} \xB7 ${allRecords.length} sesi\xF3n(es)${nPagos ? ` \xB7 ${nPagos} pago(s)` : ""} cargados.`
-      });
+      // Hora real de los datos (synced_at la escribe sync_axis.py al entrar en
+      // AimHarder), no la hora a la que se abre el panel.
+      const syncedAt = json.synced_at ? new Date(json.synced_at) : null;
+      const hora = (d) => d.toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      const cuenta = `${allRecords.length} sesi\xF3n(es)${nPagos ? ` \xB7 ${nPagos} pago(s)` : ""}`;
+      const enTiempoReal = realStarted && syncedAt && syncedAt.getTime() >= realStarted - 60e3;
+      let msg;
+      if (enTiempoReal) msg = `En tiempo real: datos tra\xEDdos de AimHarder a las ${hora(syncedAt)} \xB7 ${cuenta}.`;
+      else if (syncedAt) msg = `Datos de AimHarder del ${hora(syncedAt)} (hace ${Math.max(0, Math.round((Date.now() - syncedAt.getTime()) / 6e4))} min) \xB7 ${cuenta}.`;
+      else msg = `Datos de una sincronizaci\xF3n anterior (hora desconocida: los subi\xF3 una versi\xF3n antigua del script) \xB7 ${cuenta}.`;
+      if (realStarted && !enTiempoReal) msg += " Ojo: el servidor termin\xF3 pero estos no son los datos que acaba de traer; vuelve a pulsar \xABSincronizar ahora\xBB en un minuto.";
+      setAutoSyncState({ status: enTiempoReal || !realStarted ? "done" : "error", msg });
     } catch (e) {
       setAutoSyncState({ status: "error", msg: `No se pudo leer la URL de sincronizaci\xF3n (${e.message}). Comprueba que la has pegado bien.` });
     }
@@ -1115,7 +1123,7 @@ function AxisPanel() {
       setAutoSyncState({ status: "error", msg: `La sincronizaci\xF3n con AimHarder ha fallado: ${data.error || `HTTP ${res.status}`}.` });
       return;
     }
-    return handleAutoSync(false);
+    return handleAutoSync(false, started);
   }
   useEffect(() => {
     if (loaded && autoSyncUrl.trim()) handleAutoSync(true);
