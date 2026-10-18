@@ -11,9 +11,12 @@ const DEFAULT_COACHES = [
   { id: "marina", name: "Marina", role: "Entrenador personal", color: "#0891B2", email: "" }
 ];
 const DEFAULT_ROOMS = [
-  { id: "sala1", name: "Sala 1" },
-  { id: "sala2", name: "Sala 2" }
+  { id: "training", name: "Training Zone" },
+  { id: "pequena", name: "Sala Pequeña" },
+  { id: "grande", name: "Sala Grande" }
 ];
+const LEGACY_ROOM_MAP = { sala1: "grande", sala2: "pequena" };
+const DEFAULT_GUESS_ROOM = "grande";
 const UNKNOWN_COLOR = "#6B7280";
 const PAYMENTS_SEED = [];
 const pad = (n) => String(n).padStart(2, "0");
@@ -236,7 +239,7 @@ function parseAimHarder(json, fallbackDate, coaches, rooms) {
     const booked = athletesArr.length;
     const cMatch = matchCoach(coachName, coaches);
     const rn = stripAccents(roomName);
-    let roomId = rooms[0].id;
+    let roomId = (rooms.find((x) => x.id === DEFAULT_GUESS_ROOM) || rooms[0]).id;
     let roomGuessed = true;
     for (const room of rooms) {
       const target = stripAccents(room.name);
@@ -244,17 +247,6 @@ function parseAimHarder(json, fallbackDate, coaches, rooms) {
         roomId = room.id;
         roomGuessed = false;
         break;
-      }
-    }
-    if (rn && roomGuessed) {
-      const num = rn.match(/\d+/);
-      if (num && +num[0] === 2) {
-        roomId = ((_e = rooms[1]) == null ? void 0 : _e.id) || roomId;
-        roomGuessed = false;
-      }
-      if (num && +num[0] === 1) {
-        roomId = rooms[0].id;
-        roomGuessed = false;
       }
     }
     out.push({
@@ -985,8 +977,11 @@ function AxisPanel() {
       const savedCoaches = await loadKey("axis-coaches", DEFAULT_COACHES);
       const faltan = DEFAULT_COACHES.filter((d) => !savedCoaches.some((c) => c.id === d.id));
       setCoaches(faltan.length ? [...savedCoaches, ...faltan] : savedCoaches);
-      setRooms(await loadKey("axis-rooms", DEFAULT_ROOMS));
-      setSessions(await loadKey("axis-sessions", []));
+      const savedRooms = await loadKey("axis-rooms", DEFAULT_ROOMS);
+      const roomsAntiguas = Array.isArray(savedRooms) && savedRooms.some((r) => r && LEGACY_ROOM_MAP[r.id]);
+      setRooms(roomsAntiguas ? DEFAULT_ROOMS : savedRooms);
+      const savedSessions = await loadKey("axis-sessions", []);
+      setSessions(roomsAntiguas ? savedSessions.map((s) => LEGACY_ROOM_MAP[s.roomId] ? { ...s, roomId: LEGACY_ROOM_MAP[s.roomId] } : s) : savedSessions);
       const storedPay = await loadKey("axis-payments", null);
       setPayments(storedPay && storedPay.length ? storedPay : PAYMENTS_SEED);
       setAutoSyncUrl(await loadKey("axis-autosync-url", ""));
