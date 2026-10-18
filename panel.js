@@ -972,6 +972,7 @@ function AxisPanel() {
   const [payFilter, setPayFilter] = useState("fin");
   const [autoSyncUrl, setAutoSyncUrl] = useState("");
   const [autoSyncState, setAutoSyncState] = useState({ status: "idle", msg: "" });
+  const [syncKey, setSyncKey] = useState("");
   useEffect(() => {
     (async () => {
       const savedCoaches = await loadKey("axis-coaches", DEFAULT_COACHES);
@@ -985,6 +986,7 @@ function AxisPanel() {
       const storedPay = await loadKey("axis-payments", null);
       setPayments(storedPay && storedPay.length ? storedPay : PAYMENTS_SEED);
       setAutoSyncUrl(await loadKey("axis-autosync-url", ""));
+      setSyncKey(await loadKey("axis-sync-key", ""));
       setLoaded(true);
     })();
     const t = setInterval(() => {
@@ -1007,7 +1009,11 @@ function AxisPanel() {
   }, [payments, loaded]);
   useEffect(() => {
     if (loaded && autoSyncUrl) saveKey("axis-autosync-url", autoSyncUrl);
-  }, [autoSyncUrl, loaded]);  async function handleAutoSync(silent) {
+  }, [autoSyncUrl, loaded]);
+  useEffect(() => {
+    if (loaded) saveKey("axis-sync-key", syncKey);
+  }, [syncKey, loaded]);
+  async function handleAutoSync(silent) {
     if (!autoSyncUrl.trim()) return;
     if (!silent) setAutoSyncState({ status: "sync", msg: "Descargando datos actualizados\u2026" });
     try {
@@ -1073,29 +1079,40 @@ function AxisPanel() {
       setAutoSyncState({ status: "error", msg: `No se pudo leer la URL de sincronizaci\xF3n (${e.message}). Comprueba que la has pegado bien.` });
     }
   }
-  // Sincronización real: pide al servidor local de tu PC (sync_server.py)
-  // que ejecute sync_axis.py (login en AimHarder + subida al Gist) y, cuando
-  // termina, lee el Gist con handleAutoSync. Si el servidor no está encendido
-  // (PC apagado u otro dispositivo), solo lee el Gist como antes.
-  const LOCAL_SYNC_URL = "http://127.0.0.1:8777/sync";
+  // Sincronización real: pide al servidor de sincronización (Render, ver
+  // sync_server.py en C:\AxisSync) que entre en AimHarder y suba los datos al
+  // Gist; cuando termina, lee el Gist con handleAutoSync. Las credenciales de
+  // AimHarder solo están en ese servidor; aquí basta la clave de sincronización.
+  const SYNC_SERVER_URL = "https://axis-sync.onrender.com";
   async function handleRealSync() {
+    const avisoSoloGist = async (aviso) => {
+      await handleAutoSync(false);
+      setAutoSyncState((prev) => prev.status === "done" ? { status: "done", msg: `${prev.msg} ${aviso}` } : prev);
+    };
+    if (!syncKey.trim()) return avisoSoloGist("Introduce la clave de sincronizaci\xF3n para traer los datos de AimHarder en tiempo real.");
     const started = Date.now();
-    const tick = () => setAutoSyncState({ status: "sync", msg: `Sincronizando con AimHarder desde tu PC\u2026 (${Math.round((Date.now() - started) / 1e3)} s, suele tardar ~1 min)` });
+    let fase = "Conectando con el servidor de sincronizaci\xF3n";
+    const tick = () => setAutoSyncState({ status: "sync", msg: `${fase}\u2026 (${Math.round((Date.now() - started) / 1e3)} s)` });
     tick();
     const timer = setInterval(tick, 1e3);
     let res, data;
     try {
-      res = await fetch(LOCAL_SYNC_URL, { method: "POST" });
+      // El plan gratuito se duerme tras 15 min sin uso: esto lo despierta.
+      await fetch(`${SYNC_SERVER_URL}/status`);
+      fase = "Descargando datos de AimHarder (suele tardar 1-2 min)";
+      res = await fetch(`${SYNC_SERVER_URL}/sync`, { method: "POST", headers: { "X-Axis-Key": syncKey.trim() } });
       data = await res.json().catch(() => ({}));
     } catch (e) {
       clearInterval(timer);
-      await handleAutoSync(false);
-      setAutoSyncState((prev) => prev.status === "done" ? { status: "done", msg: `${prev.msg} Ojo: el sincronizador de tu PC no est\xE1 encendido, as\xED que son los datos de la \xFAltima sincronizaci\xF3n.` } : prev);
-      return;
+      return avisoSoloGist("Ojo: el servidor de sincronizaci\xF3n no responde, as\xED que son los datos de la \xFAltima sincronizaci\xF3n.");
     }
     clearInterval(timer);
+    if (res.status === 401) {
+      setAutoSyncState({ status: "error", msg: "La clave de sincronizaci\xF3n no es correcta. Rev\xEDsala en el campo de abajo." });
+      return;
+    }
     if (!res.ok || !data.ok) {
-      setAutoSyncState({ status: "error", msg: `La sincronizaci\xF3n con AimHarder ha fallado: ${data.error || `HTTP ${res.status}`}. Detalles en C:\AxisSync\log.txt.` });
+      setAutoSyncState({ status: "error", msg: `La sincronizaci\xF3n con AimHarder ha fallado: ${data.error || `HTTP ${res.status}`}.` });
       return;
     }
     return handleAutoSync(false);
@@ -1351,7 +1368,7 @@ function AxisPanel() {
       value: autoSyncUrl,
       onChange: (e) => setAutoSyncUrl(e.target.value)
     }
-  ), /* @__PURE__ */ React.createElement("button", { className: "axis-btn primary", onClick: () => handleRealSync(), disabled: !autoSyncUrl.trim() || autoSyncState.status === "sync" }, autoSyncState.status === "sync" ? "Sincronizando\u2026" : "Sincronizar ahora")), autoSyncState.status !== "idle" && /* @__PURE__ */ React.createElement("p", { style: { marginTop: 10, fontSize: 13, color: autoSyncState.status === "error" ? "#9B1C1C" : "#1F3A2A" } }, autoSyncState.status === "sync" ? "\u23F3 " : autoSyncState.status === "done" ? "\u2705 " : "\u26A0\uFE0F ", autoSyncState.msg), /* @__PURE__ */ React.createElement("p", { style: { marginTop: 8, fontSize: 12, color: "#5A6B63" } }, "«Sincronizar ahora» entra en AimHarder en ese momento a través del sincronizador de tu PC (debe estar encendido). Desde otro dispositivo, solo carga la última sincronización.")), /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: 0, fontSize: 20, textTransform: "uppercase" } }, "Sesiones del ", fmtDateHuman(date)), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: addManual }, "+ A\xF1adir")), !daySessions.length && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: "#5A6B63" } }, "Sin sesiones este d\xEDa."), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gap: 8, marginTop: 10 } }, daySessions.map((s) => /* @__PURE__ */ React.createElement("div", { key: s.id, style: { display: "grid", gridTemplateColumns: "70px 70px 1fr 1fr 1fr 1fr 60px", gap: 6, alignItems: "center", fontSize: 13 } }, /* @__PURE__ */ React.createElement("input", { className: "axis-input", type: "time", value: s.start, onChange: (e) => updateSession(s.id, { start: e.target.value }) }), /* @__PURE__ */ React.createElement("input", { className: "axis-input", type: "time", value: s.end, onChange: (e) => updateSession(s.id, { end: e.target.value }) }), /* @__PURE__ */ React.createElement("select", { className: "axis-input", value: s.coachId || "", onChange: (e) => updateSession(s.id, { coachId: e.target.value || null }) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "(", s.coachRaw || "sin coach", ")"), coaches.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, c.name))), /* @__PURE__ */ React.createElement("select", { className: "axis-input", value: s.roomId, onChange: (e) => updateSession(s.id, { roomId: e.target.value }) }, rooms.map((r) => /* @__PURE__ */ React.createElement("option", { key: r.id, value: r.id }, r.name))), /* @__PURE__ */ React.createElement("input", { className: "axis-input", value: s.title, onChange: (e) => updateSession(s.id, { title: e.target.value }), placeholder: "Actividad" }), /* @__PURE__ */ React.createElement("input", { className: "axis-input", value: s.client || "", onChange: (e) => updateSession(s.id, { client: e.target.value }), placeholder: "Cliente" }), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => deleteSession(s.id), "aria-label": "Eliminar sesi\xF3n" }, "\u{1F5D1}")))))), tab === "stats" && (() => {
+  ), /* @__PURE__ */ React.createElement("button", { className: "axis-btn primary", onClick: () => handleRealSync(), disabled: !autoSyncUrl.trim() || autoSyncState.status === "sync" }, autoSyncState.status === "sync" ? "Sincronizando\u2026" : "Sincronizar ahora")), autoSyncState.status !== "idle" && /* @__PURE__ */ React.createElement("p", { style: { marginTop: 10, fontSize: 13, color: autoSyncState.status === "error" ? "#9B1C1C" : "#1F3A2A" } }, autoSyncState.status === "sync" ? "\u23F3 " : autoSyncState.status === "done" ? "\u2705 " : "\u26A0\uFE0F ", autoSyncState.msg), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("input", { className: "axis-input", type: "password", style: { width: 260 }, placeholder: "Clave de sincronización", value: syncKey, onChange: (e) => setSyncKey(e.target.value) }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#5A6B63" } }, syncKey.trim() ? "«Sincronizar ahora» entra en AimHarder en ese momento (1-2 min)." : "Introdúcela una vez en cada portátil para que «Sincronizar ahora» entre en AimHarder en ese momento."))), /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: 0, fontSize: 20, textTransform: "uppercase" } }, "Sesiones del ", fmtDateHuman(date)), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: addManual }, "+ A\xF1adir")), !daySessions.length && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: "#5A6B63" } }, "Sin sesiones este d\xEDa."), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gap: 8, marginTop: 10 } }, daySessions.map((s) => /* @__PURE__ */ React.createElement("div", { key: s.id, style: { display: "grid", gridTemplateColumns: "70px 70px 1fr 1fr 1fr 1fr 60px", gap: 6, alignItems: "center", fontSize: 13 } }, /* @__PURE__ */ React.createElement("input", { className: "axis-input", type: "time", value: s.start, onChange: (e) => updateSession(s.id, { start: e.target.value }) }), /* @__PURE__ */ React.createElement("input", { className: "axis-input", type: "time", value: s.end, onChange: (e) => updateSession(s.id, { end: e.target.value }) }), /* @__PURE__ */ React.createElement("select", { className: "axis-input", value: s.coachId || "", onChange: (e) => updateSession(s.id, { coachId: e.target.value || null }) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "(", s.coachRaw || "sin coach", ")"), coaches.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, c.name))), /* @__PURE__ */ React.createElement("select", { className: "axis-input", value: s.roomId, onChange: (e) => updateSession(s.id, { roomId: e.target.value }) }, rooms.map((r) => /* @__PURE__ */ React.createElement("option", { key: r.id, value: r.id }, r.name))), /* @__PURE__ */ React.createElement("input", { className: "axis-input", value: s.title, onChange: (e) => updateSession(s.id, { title: e.target.value }), placeholder: "Actividad" }), /* @__PURE__ */ React.createElement("input", { className: "axis-input", value: s.client || "", onChange: (e) => updateSession(s.id, { client: e.target.value }), placeholder: "Cliente" }), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => deleteSession(s.id), "aria-label": "Eliminar sesi\xF3n" }, "\u{1F5D1}")))))), tab === "stats" && (() => {
     const colName = (id) => {
       var _a;
       return id === "__none__" ? "Sin asignar" : ((_a = coaches.find((c) => c.id === id)) == null ? void 0 : _a.name) || id;
