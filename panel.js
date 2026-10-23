@@ -813,10 +813,14 @@ function valorPorPersona(rows, prefix) {
 // Solo para quien tiene tarifa aquí. Porcentaje sobre el valor de cada sesión
 // SIN IVA (lo que pagó el cliente por esa sesión de su bono, quitando el IVA);
 // The Axis Club se paga a precio fijo por sesión según los asistentes.
-const IVA_SESIONES = 0.21;
+// IVA por tipo de sesión: la fisioterapia está exenta (0 %); el resto, 21 %.
+const ivaDe = (tipo) => tipo === "Fisioterapia" ? 0 : 0.21;
 const PAGO_COACH = {
   sergio: {
-    pct: { "Entrenamiento personal": 0.6, "Fisioterapia": 0.6, "Performance Group": 0.6, "Valoración inicial": 0.5 },
+    pct: { "Entrenamiento personal": 0.6, "Fisioterapia": 0.6, "Performance Group": 0.6, "Valoración inicial": 0.6 },
+    // Valoración con dos entrenadores a la vez (otro coach con una valoración
+    // que se solapa en el tiempo): 50 % en lugar del 60 %.
+    valoracionCompartida: 0.5,
     axisClub: [{ max: 2, eur: 15, label: "0-2 personas" }, { max: 4, eur: 20, label: "3-4 personas" }, { max: Infinity, eur: 30, label: "5-6 personas" }]
   }
 };
@@ -827,17 +831,29 @@ function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
   const lineas = /* @__PURE__ */ new Map();
   const linea = (key, concepto, regla) => lineas.get(key) || lineas.set(key, { concepto, regla, n: 0, base: 0, pago: 0 }).get(key);
   const detalle = [];
+  const porId = new Map(sessions.map((s) => [s.id, s]));
+  const compartida = (sid) => {
+    const v = porId.get(sid);
+    return !!v && sessions.some((o) => o.id !== v.id && o.date === v.date && sessionTypeOf(o.title) === "Valoración inicial" && personKeyOfSession(o, coaches) !== k && toMin(o.start) < toMin(v.end) && toMin(v.start) < toMin(o.end));
+  };
   for (const r of ledger) {
     if (r.coach !== k || !(r.date || "").startsWith(prefix)) continue;
-    const pct = cfg.pct[r.tipo];
+    let pct = cfg.pct[r.tipo];
     if (pct == null) continue;
-    const base = r.value / (1 + IVA_SESIONES);
+    let key = r.tipo, concepto = r.tipo === "Fisioterapia" || r.tipo === "Entrenamiento personal" ? `${r.tipo} (1 a 1)` : r.tipo;
+    if (r.tipo === "Valoración inicial") {
+      const conOtro = cfg.valoracionCompartida != null && compartida(r.sid);
+      if (conOtro) pct = cfg.valoracionCompartida;
+      key = conOtro ? "val|otro" : "val|solo";
+      concepto = conOtro ? "Valoración inicial (con otro entrenador)" : "Valoración inicial (solo)";
+    }
+    const base = r.value / (1 + ivaDe(r.tipo));
     const pago = base * pct;
-    const l = linea(r.tipo, r.tipo === "Fisioterapia" || r.tipo === "Entrenamiento personal" ? `${r.tipo} (1 a 1)` : r.tipo, `${Math.round(pct * 100)} %`);
+    const l = linea(key, concepto, `${Math.round(pct * 100)} %`);
     l.n += 1;
     l.base += base;
     l.pago += pago;
-    detalle.push({ date: r.date, start: r.start, tipo: r.tipo, quien: r.client, origen: r.origen, base, pago, sinBono: r.sinBono });
+    detalle.push({ date: r.date, start: r.start, tipo: key.startsWith("val|") ? concepto : r.tipo, quien: r.client, origen: r.origen, base, pago, sinBono: r.sinBono });
   }
   for (const s of sessions) {
     if (!(s.date || "").startsWith(prefix) || !isDone(s, hoy, nowMin)) continue;
@@ -849,7 +865,7 @@ function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
     l.pago += tramo.eur;
     detalle.push({ date: s.date, start: s.start, tipo: "The Axis Club", quien: `${n} ${n === 1 ? "persona" : "personas"}`, origen: "Tarifa fija", base: null, pago: tramo.eur, sinBono: false });
   }
-  const orden = ["Entrenamiento personal", "Fisioterapia", "Performance Group", "Valoración inicial", ...cfg.axisClub.map((t) => "club|" + t.label)];
+  const orden = ["Entrenamiento personal", "Fisioterapia", "Performance Group", "val|solo", "val|otro", ...cfg.axisClub.map((t) => "club|" + t.label)];
   detalle.sort((a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || "")));
   return {
     lineas: orden.filter((o) => lineas.has(o)).map((o) => lineas.get(o)),
@@ -871,7 +887,7 @@ function PagoCoach({ k, p, ledger, sessions, coaches, periodo, month, year, etiq
   const h = React.createElement;
   return h("section", { style: { ...card, overflowX: "auto", borderLeft: `6px solid ${p.color}` } },
     h("h2", { className: "axis-display", style: h2s }, "A pagar a ", p.short, " · ", etiquetaPeriodo),
-    h("p", { style: { margin: "0 0 10px", fontSize: 12, color: C_MUTED } }, "Por las sesiones ya impartidas. Porcentaje sobre el valor de cada sesión sin IVA (", Math.round(IVA_SESIONES * 100), " %): lo que pagó el cliente por esa sesión de su bono. The Axis Club, tarifa fija por sesión según asistentes."),
+    h("p", { style: { margin: "0 0 10px", fontSize: 12, color: C_MUTED } }, "Por las sesiones ya impartidas. Porcentaje sobre el valor de cada sesión sin IVA (21 %; la fisioterapia, 0 %): lo que pagó el cliente por esa sesión de su bono. The Axis Club, tarifa fija por sesión según asistentes."),
     h("div", { className: "axis-display", style: { fontSize: 34, fontWeight: 700, margin: "4px 0 12px" } }, eur2(r.total)),
     r.lineas.length === 0 ? h("p", { style: { fontSize: 13, color: C_MUTED, margin: 0 } }, "Sin sesiones impartidas en ", etiquetaPeriodo, ".") : h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 560 } },
       h("thead", null, h("tr", null, h("th", { style: { ...th, textAlign: "left" } }, "Concepto"), h("th", { style: th }, "Sesiones"), h("th", { style: th }, "Valor sin IVA"), h("th", { style: th }, "Tarifa"), h("th", { style: th }, "A pagar"))),
