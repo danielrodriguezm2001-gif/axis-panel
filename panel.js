@@ -426,7 +426,7 @@ function productOf(conceptRaw, fallbackCat) {
     if (t.includes("mes 1")) return { familia: "Grupos", nombre: "The Axis Club · Mes 1", sesiones: null };
     return { familia: "Grupos", nombre: "The Axis Club", sesiones: null };
   }
-  if (t.includes("performance")) return { familia: "Grupos", nombre: "Performance Group", sesiones: 8 };
+  if (t.includes("performance")) return { familia: "Grupos", nombre: "Performance Group", sesiones: num(/\((\d+)\s*sesion/) || 8 };
   if (t.includes("valoraci")) return area === "Psicología" ? { familia: "Psicología", nombre: "Valoración inicial · Psicología", sesiones: 1 } : { familia: "Valoración", nombre: "Valoración inicial", sesiones: 1 };
   if (t.includes("trimestral") && area === "Nutrición") return { familia: "Nutrición", nombre: "Pack trimestral · Nutrición", sesiones: null };
   if (t.includes("grupo")) {
@@ -699,14 +699,23 @@ const normName = (s) => stripAccents(s).replace(/[^a-z0-9 ]/g, " ").replace(/\s+
 function creditFamily(pr) {
   if (pr.familia === "Fisioterapia") return "Fisioterapia";
   if (pr.familia === "Entrenamiento personal") return "Entrenamiento personal";
+  if (pr.nombre === "Performance Group") return "Performance Group";
+  if (pr.familia === "Valoración") return "Valoración inicial";
   return null;
 }
+const PREFS_CREDITO = {
+  "Fisioterapia": [(c) => c.fam === "Fisioterapia", (c) => c.generic],
+  "Entrenamiento personal": [(c) => c.fam === "Entrenamiento personal"],
+  "Performance Group": [(c) => c.fam === "Performance Group"],
+  "Valoración inicial": [(c) => c.fam === "Valoración inicial"]
+};
 function origenLabel(pr, fam) {
+  if (fam === "Performance Group" || fam === "Valoración inicial") return pr.sesiones === 1 ? fam : `${fam} · ${String(pr.sesiones).replace(".", ",")} sesiones`;
   const n = pr.sesiones;
   const base = n === 1 ? "Sesión suelta" : `Bono ${String(n).replace(".", ",")} sesiones`;
   return `${base} · ${fam === "Fisioterapia" ? "Fisio" : "EP"}`;
 }
-function buildSessionLedger(payments, sessions, coaches, hoy, nowMin) {
+function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SES_VALORADAS) {
   const credits = /* @__PURE__ */ new Map();
   for (const p of payments) {
     const pr = productOf(p.co, p.cat);
@@ -719,7 +728,8 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin) {
       id: p.id,
       d: p.d || "",
       fam,
-      generic: !areaOf(stripAccents(p.co || "")),
+      // Bono sin área ("sin especificar"): solo los de EP pueden cubrir fisio.
+      generic: fam === "Entrenamiento personal" && !areaOf(stripAccents(p.co || "")),
       left: pr.sesiones,
       unit: p.amt / pr.sesiones,
       origen: origenLabel(pr, fam),
@@ -738,7 +748,7 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin) {
     const c = names.filter((n) => n.startsWith(k + " ") || k.startsWith(n + " "));
     return c.length === 1 ? c[0] : k;
   };
-  const hechas = sessions.filter((s) => isDone(s, hoy, nowMin) && SES_VALORADAS.includes(sessionTypeOf(s.title))).sort((a, b) => ((a.date || "") + (a.start || "")).localeCompare((b.date || "") + (b.start || "")));
+  const hechas = sessions.filter((s) => isDone(s, hoy, nowMin) && tipos.includes(sessionTypeOf(s.title))).sort((a, b) => ((a.date || "") + (a.start || "")).localeCompare((b.date || "") + (b.start || "")));
   const rows = [];
   for (const s of hechas) {
     const tipo = sessionTypeOf(s.title);
@@ -750,7 +760,7 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin) {
     }
     for (const cl of clientes) {
       const list = credits.get(resolve(cl)) || [];
-      const prefs = tipo === "Fisioterapia" ? [(c) => c.fam === "Fisioterapia", (c) => c.generic] : [(c) => c.fam === "Entrenamiento personal"];
+      const prefs = PREFS_CREDITO[tipo] || [];
       let cr = null;
       for (const f of prefs) {
         cr = list.find((c) => c.left > 0 && f(c));
@@ -798,6 +808,85 @@ function valorPorPersona(rows, prefix) {
     }
   }
   return per;
+}
+// ---------- Pago a coaches por sesiones ----------
+// Solo para quien tiene tarifa aquí. Porcentaje sobre el valor de cada sesión
+// SIN IVA (lo que pagó el cliente por esa sesión de su bono, quitando el IVA);
+// The Axis Club se paga a precio fijo por sesión según los asistentes.
+const IVA_SESIONES = 0.21;
+const PAGO_COACH = {
+  sergio: {
+    pct: { "Entrenamiento personal": 0.6, "Fisioterapia": 0.6, "Performance Group": 0.6, "Valoración inicial": 0.5 },
+    axisClub: [{ max: 2, eur: 15, label: "0-2 personas" }, { max: 4, eur: 20, label: "3-4 personas" }, { max: Infinity, eur: 30, label: "5-6 personas" }]
+  }
+};
+const SES_PAGO = ["Entrenamiento personal", "Fisioterapia", "Performance Group", "Valoración inicial"];
+function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
+  const cfg = PAGO_COACH[k];
+  if (!cfg) return null;
+  const lineas = /* @__PURE__ */ new Map();
+  const linea = (key, concepto, regla) => lineas.get(key) || lineas.set(key, { concepto, regla, n: 0, base: 0, pago: 0 }).get(key);
+  const detalle = [];
+  for (const r of ledger) {
+    if (r.coach !== k || !(r.date || "").startsWith(prefix)) continue;
+    const pct = cfg.pct[r.tipo];
+    if (pct == null) continue;
+    const base = r.value / (1 + IVA_SESIONES);
+    const pago = base * pct;
+    const l = linea(r.tipo, r.tipo === "Fisioterapia" || r.tipo === "Entrenamiento personal" ? `${r.tipo} (1 a 1)` : r.tipo, `${Math.round(pct * 100)} %`);
+    l.n += 1;
+    l.base += base;
+    l.pago += pago;
+    detalle.push({ date: r.date, start: r.start, tipo: r.tipo, quien: r.client, origen: r.origen, base, pago, sinBono: r.sinBono });
+  }
+  for (const s of sessions) {
+    if (!(s.date || "").startsWith(prefix) || !isDone(s, hoy, nowMin)) continue;
+    if (sessionTypeOf(s.title) !== "The Axis Club" || personKeyOfSession(s, coaches) !== k) continue;
+    const n = Math.max(0, s.booked || 0);
+    const tramo = cfg.axisClub.find((t) => n <= t.max);
+    const l = linea("club|" + tramo.label, `The Axis Club · ${tramo.label}`, `${tramo.eur} € / sesión`);
+    l.n += 1;
+    l.pago += tramo.eur;
+    detalle.push({ date: s.date, start: s.start, tipo: "The Axis Club", quien: `${n} ${n === 1 ? "persona" : "personas"}`, origen: "Tarifa fija", base: null, pago: tramo.eur, sinBono: false });
+  }
+  const orden = ["Entrenamiento personal", "Fisioterapia", "Performance Group", "Valoración inicial", ...cfg.axisClub.map((t) => "club|" + t.label)];
+  detalle.sort((a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || "")));
+  return {
+    lineas: orden.filter((o) => lineas.has(o)).map((o) => lineas.get(o)),
+    detalle,
+    sinBono: detalle.filter((d) => d.sinBono),
+    total: [...lineas.values()].reduce((a, l) => a + l.pago, 0)
+  };
+}
+function PagoCoach({ k, p, ledger, sessions, coaches, periodo, month, year, etiquetaPeriodo, hoy, nowMin }) {
+  const eur2 = (v) => v.toLocaleString("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const prefix = periodo === "mes" ? month : String(year);
+  const r = pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin);
+  if (!r) return null;
+  const meses = periodo === "mes" ? [] : Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`).map((m) => ({ m, total: pagoCoach(k, ledger, sessions, coaches, m, hoy, nowMin).total })).filter((x) => x.total > 0);
+  const tdT = { ...td, fontWeight: 800, borderTop: `2px solid ${C_INK}` };
+  const tdL = { ...td, textAlign: "left" };
+  const fmtD = (d) => d.slice(8, 10) + "/" + d.slice(5, 7);
+  const sinB = [...new Set(r.sinBono.map((d) => d.quien))];
+  const h = React.createElement;
+  return h("section", { style: { ...card, overflowX: "auto", borderLeft: `6px solid ${p.color}` } },
+    h("h2", { className: "axis-display", style: h2s }, "A pagar a ", p.short, " · ", etiquetaPeriodo),
+    h("p", { style: { margin: "0 0 10px", fontSize: 12, color: C_MUTED } }, "Por las sesiones ya impartidas. Porcentaje sobre el valor de cada sesión sin IVA (", Math.round(IVA_SESIONES * 100), " %): lo que pagó el cliente por esa sesión de su bono. The Axis Club, tarifa fija por sesión según asistentes."),
+    h("div", { className: "axis-display", style: { fontSize: 34, fontWeight: 700, margin: "4px 0 12px" } }, eur2(r.total)),
+    r.lineas.length === 0 ? h("p", { style: { fontSize: 13, color: C_MUTED, margin: 0 } }, "Sin sesiones impartidas en ", etiquetaPeriodo, ".") : h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 560 } },
+      h("thead", null, h("tr", null, h("th", { style: { ...th, textAlign: "left" } }, "Concepto"), h("th", { style: th }, "Sesiones"), h("th", { style: th }, "Valor sin IVA"), h("th", { style: th }, "Tarifa"), h("th", { style: th }, "A pagar"))),
+      h("tbody", null,
+        r.lineas.map((l) => h("tr", { key: l.concepto }, h("td", { style: tdL }, l.concepto), h("td", { style: { ...td, fontWeight: 700 } }, l.n), h("td", { style: td }, l.concepto.startsWith("The Axis Club") ? "–" : eur2(l.base)), h("td", { style: td }, l.regla), h("td", { style: { ...td, fontWeight: 700 } }, eur2(l.pago)))),
+        h("tr", null, h("td", { style: { ...tdT, textAlign: "left" } }, "Total a pagar"), h("td", { style: tdT }, r.lineas.reduce((a, l) => a + l.n, 0)), h("td", { style: tdT }), h("td", { style: tdT }), h("td", { style: tdT }, eur2(r.total))))),
+    sinB.length > 0 && h("p", { style: { margin: "10px 0 0", fontSize: 12, color: C_WARN } }, r.sinBono.length, " ", r.sinBono.length === 1 ? "sesión" : "sesiones", " sin bono que las cubra no suman nada (revisar cobro): ", sinB.join(", "), "."),
+    meses.length > 0 && h("table", { style: { borderCollapse: "collapse", width: "100%", maxWidth: 360, marginTop: 14 } },
+      h("thead", null, h("tr", null, h("th", { style: { ...th, textAlign: "left" } }, "Mes"), h("th", { style: th }, "A pagar"))),
+      h("tbody", null, meses.map((x) => h("tr", { key: x.m }, h("td", { style: tdL }, monthLabel(x.m)), h("td", { style: { ...td, fontWeight: 700 } }, eur2(x.total)))))),
+    r.detalle.length > 0 && h("details", { style: { marginTop: 14 } },
+      h("summary", { style: { cursor: "pointer", fontSize: 13, fontWeight: 700 } }, "Ver el cálculo sesión a sesión (", r.detalle.length, ")"),
+      h("div", { style: { overflowX: "auto", marginTop: 8 } }, h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 640 } },
+        h("thead", null, h("tr", null, ["Fecha", "Hora", "Tipo", "Cliente / asistentes", "Bono de origen"].map((t) => h("th", { key: t, style: { ...th, textAlign: "left" } }, t)), h("th", { style: th }, "Valor sin IVA"), h("th", { style: th }, "A pagar"))),
+        h("tbody", null, r.detalle.map((d, i) => h("tr", { key: i, style: { background: d.sinBono ? "#FEF3E7" : void 0 } }, h("td", { style: tdL }, fmtD(d.date)), h("td", { style: tdL }, d.start || "–"), h("td", { style: tdL }, d.tipo), h("td", { style: tdL }, d.quien), h("td", { style: { ...tdL, color: d.sinBono ? C_WARN : void 0 } }, d.origen), h("td", { style: td }, d.base == null ? "–" : eur2(d.base)), h("td", { style: { ...td, fontWeight: 700 } }, eur2(d.pago)))))))));
 }
 function ValorEquipo({ valor, P, etiquetaPeriodo }) {
   const ks = sortPeople(Object.keys(valor).filter((k) => valor[k].n || valor[k].cedidas.n));
@@ -892,6 +981,7 @@ function PersonasTab({ payments, sessions, coaches, nowMin }) {
   }, [payments, sessions, coaches, prefix, estado, nowMin]);
   const ledger = useMemo(() => buildSessionLedger(payments, sessions, coaches, hoy, nowMin), [payments, sessions, coaches, nowMin]);
   const valor = useMemo(() => valorPorPersona(ledger, prefix), [ledger, prefix]);
+  const ledgerPago = useMemo(() => buildSessionLedger(payments, sessions, coaches, hoy, nowMin, SES_PAGO), [payments, sessions, coaches, nowMin]);
   const keys = sortPeople(Object.keys(stats).filter((k) => stats[k].nVentas || stats[k].nSes || stats[k].nProg));
   const P = (k) => people.get(k) || { key: k, name: CREATOR_LABELS[k] || k, short: CREATOR_LABELS[k] || k, color: "#6B7280" };
   const horas = (min) => (min / 60).toLocaleString("es-ES", { maximumFractionDigits: 1 }) + " h";
@@ -954,7 +1044,7 @@ function PersonasTab({ payments, sessions, coaches, nowMin }) {
       const tdS = { ...td, fontWeight: 700, borderTop: `2px solid ${C_INK}` };
       return /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { style: { ...tdS, textAlign: "left" } }, "Total sin Axis Club"), /* @__PURE__ */ React.createElement("td", { style: tdS }, sinClub.min ? horas(sinClub.min) : "–"), /* @__PURE__ */ React.createElement("td", { style: tdS }, sinClub.n || "–"), /* @__PURE__ */ React.createElement("td", { style: tdS }, sinClub.asist || "–"), /* @__PURE__ */ React.createElement("td", { style: tdS }), /* @__PURE__ */ React.createElement("td", { style: { ...tdS, color: C_MUTED } }, sinClub.prog || "–"));
     })(), /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { style: { ...td, textAlign: "left", fontWeight: 700 } }, "Total"), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700 } }, s.min ? horas(s.min) : "–"), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700 } }, s.nSes), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700 } }, s.asist || "–"), /* @__PURE__ */ React.createElement("td", { style: td }), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700, color: C_MUTED } }, s.nProg || "–")))))));
-  })(), sel !== "__equipo__" && /* @__PURE__ */ React.createElement(ValorPersona, { v: valor[sel], p: P(sel), P, etiquetaPeriodo, rows: ledger.filter((r) => (r.date || "").startsWith(prefix)), k: sel }), /* @__PURE__ */ React.createElement("p", { style: { margin: 0, fontSize: 12, color: C_MUTED } }, "Ventas: se atribuyen a quien registró el cobro en AimHarder («Creado por»); lo creado por la cuenta del centro o el administrador va a Axis. Sesiones: se atribuyen al coach de la sesión en el calendario. «2 a 1» = 2 clientes con un mismo profesional."));
+  })(), sel !== "__equipo__" && PAGO_COACH[sel] && /* @__PURE__ */ React.createElement(PagoCoach, { k: sel, p: P(sel), ledger: ledgerPago, sessions, coaches, periodo, month, year, etiquetaPeriodo, hoy, nowMin }), sel !== "__equipo__" && /* @__PURE__ */ React.createElement(ValorPersona, { v: valor[sel], p: P(sel), P, etiquetaPeriodo, rows: ledger.filter((r) => (r.date || "").startsWith(prefix)), k: sel }), /* @__PURE__ */ React.createElement("p", { style: { margin: 0, fontSize: 12, color: C_MUTED } }, "Ventas: se atribuyen a quien registró el cobro en AimHarder («Creado por»); lo creado por la cuenta del centro o el administrador va a Axis. Sesiones: se atribuyen al coach de la sesión en el calendario. «2 a 1» = 2 clientes con un mismo profesional."));
 }
 
 function AxisPanel() {
