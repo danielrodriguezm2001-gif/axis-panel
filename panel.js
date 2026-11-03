@@ -427,8 +427,10 @@ function productOf(conceptRaw, fallbackCat) {
     return { familia: "Grupos", nombre: "The Axis Club", sesiones: null };
   }
   if (t.includes("performance")) return { familia: "Grupos", nombre: "Performance Group", sesiones: num(/\((\d+)\s*sesion/) || 8 };
+  if (t.includes("valoraci") && area === "Nutrición") return { familia: "Nutrición", nombre: "Valoración inicial · Nutrición", sesiones: 1 };
   if (t.includes("valoraci")) return area === "Psicología" ? { familia: "Psicología", nombre: "Valoración inicial · Psicología", sesiones: 1 } : { familia: "Valoración", nombre: "Valoración inicial", sesiones: 1 };
-  if (t.includes("trimestral") && area === "Nutrición") return { familia: "Nutrición", nombre: "Pack trimestral · Nutrición", sesiones: null };
+  // Pack trimestral: valoración inicial + entrega del pack nutricional + 2 seguimientos.
+  if (t.includes("trimestral") && area === "Nutrición") return { familia: "Nutrición", nombre: "Pack trimestral · Nutrición", sesiones: 4 };
   if (t.includes("grupo")) {
     const n = num(/\((\d+)\s*sesion/);
     return { familia: "Grupos", nombre: "Grupo reducido" + (n ? ` (${n} sesiones)` : ""), sesiones: n };
@@ -701,15 +703,18 @@ function creditFamily(pr) {
   if (pr.familia === "Entrenamiento personal") return "Entrenamiento personal";
   if (pr.nombre === "Performance Group") return "Performance Group";
   if (pr.familia === "Valoración") return "Valoración inicial";
+  if (pr.familia === "Nutrición") return "Nutrición";
   return null;
 }
 const PREFS_CREDITO = {
   "Fisioterapia": [(c) => c.fam === "Fisioterapia", (c) => c.generic],
   "Entrenamiento personal": [(c) => c.fam === "Entrenamiento personal"],
   "Performance Group": [(c) => c.fam === "Performance Group"],
-  "Valoración inicial": [(c) => c.fam === "Valoración inicial"]
+  "Valoración inicial": [(c) => c.fam === "Valoración inicial"],
+  "Nutrición": [(c) => c.fam === "Nutrición"]
 };
 function origenLabel(pr, fam) {
+  if (fam === "Nutrición") return pr.nombre;
   if (fam === "Performance Group" || fam === "Valoración inicial") return pr.sesiones === 1 ? fam : `${fam} · ${String(pr.sesiones).replace(".", ",")} sesiones`;
   const n = pr.sesiones;
   const base = n === 1 ? "Sesión suelta" : `Bono ${String(n).replace(".", ",")} sesiones`;
@@ -813,9 +818,16 @@ function valorPorPersona(rows, prefix) {
 // Solo para quien tiene tarifa aquí. Porcentaje sobre el valor de cada sesión
 // SIN IVA (lo que pagó el cliente por esa sesión de su bono, quitando el IVA);
 // The Axis Club se paga a precio fijo por sesión según los asistentes.
-// IVA por tipo de sesión: la fisioterapia está exenta (0 %); el resto, 21 %.
-const ivaDe = (tipo) => tipo === "Fisioterapia" ? 0 : 0.21;
+// IVA por tipo de sesión: fisioterapia y nutrición están exentas (0 %); el resto, 21 %.
+const ivaDe = (tipo) => tipo === "Fisioterapia" || tipo === "Nutrición" ? 0 : 0.21;
+const PCT_100 = { "Entrenamiento personal": 1, "Fisioterapia": 1, "Performance Group": 1, "Valoración inicial": 1 };
 const PAGO_COACH = {
+  marc: { pct: PCT_100, notas: ["The Axis Club no suma en su pago."] },
+  erik: { pct: PCT_100, notas: ["The Axis Club no suma en su pago."] },
+  marti: {
+    pct: { "Nutrición": 0.7, "Fisioterapia": 0.7 },
+    notas: ["Pack trimestral de nutrición = 4 sesiones: valoración inicial, entrega del pack nutricional y 2 seguimientos (precio del pack ÷ 4 por sesión).", "Martí es el único nutricionista: los packs de nutrición solo cubren sus sesiones de nutrición."]
+  },
   sergio: {
     pct: { "Entrenamiento personal": 0.6, "Fisioterapia": 0.6, "Performance Group": 0.6, "Valoración inicial": 0.6 },
     // Valoración con dos entrenadores a la vez (otro coach con una valoración
@@ -824,7 +836,26 @@ const PAGO_COACH = {
     axisClub: [{ max: 2, eur: 15, label: "0-2 personas" }, { max: 4, eur: 20, label: "3-4 personas" }, { max: Infinity, eur: 30, label: "5-6 personas" }]
   }
 };
-const SES_PAGO = ["Entrenamiento personal", "Fisioterapia", "Performance Group", "Valoración inicial"];
+const SES_PAGO = ["Entrenamiento personal", "Fisioterapia", "Performance Group", "Valoración inicial", "Nutrición"];
+const pctTxt = (x) => `${Math.round(x * 100)} %`;
+// Leyenda de las condiciones de cada persona, generada a partir de su tarifa.
+function leyendaPago(cfg) {
+  const grupos = /* @__PURE__ */ new Map();
+  for (const [tipo, pct] of Object.entries(cfg.pct)) grupos.set(pct, [...grupos.get(pct) || [], tipo === "Entrenamiento personal" ? "entrenamiento personal" : tipo === "Valoración inicial" ? "valoración inicial" : tipo === "Fisioterapia" ? "fisioterapia" : tipo === "Nutrición" ? "nutrición" : tipo]);
+  const lista = (xs) => xs.length > 1 ? xs.slice(0, -1).join(", ") + " y " + xs[xs.length - 1] : xs[0];
+  const l = [...grupos].map(([pct, tipos]) => {
+    const t = lista(tipos);
+    return `${t.charAt(0).toUpperCase() + t.slice(1)}: ${pctTxt(pct)} del valor de cada sesión impartida.`;
+  });
+  if (cfg.valoracionCompartida != null) l.push(`Valoración inicial con otro entrenador a la vez (otra valoración en AimHarder que coincide en horario): ${pctTxt(cfg.valoracionCompartida)}.`);
+  if (cfg.axisClub) l.push(`The Axis Club, por sesión según asistentes: ${cfg.axisClub.map((t) => `${t.label} → ${t.eur} €`).join(" · ")}.`);
+  return [...l, ...cfg.notas || []];
+}
+const LEYENDA_COMUN = [
+  "Valor de una sesión = lo que pagó el cliente por esa sesión de su bono (precio del bono ÷ número de sesiones), sin IVA: 21 %, salvo fisioterapia y nutrición (0 %).",
+  "Solo cuentan las sesiones ya impartidas, según el entrenador asignado en AimHarder; cada cliente de la sesión gasta una sesión de su bono, por orden de compra.",
+  "Las sesiones sin un bono pagado que las cubra no suman (salen en naranja para revisar el cobro)."
+];
 function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
   const cfg = PAGO_COACH[k];
   if (!cfg) return null;
@@ -840,7 +871,7 @@ function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
     if (r.coach !== k || !(r.date || "").startsWith(prefix)) continue;
     let pct = cfg.pct[r.tipo];
     if (pct == null) continue;
-    let key = r.tipo, concepto = r.tipo === "Fisioterapia" || r.tipo === "Entrenamiento personal" ? `${r.tipo} (1 a 1)` : r.tipo;
+    let key = r.tipo, concepto = r.tipo;
     if (r.tipo === "Valoración inicial") {
       const conOtro = cfg.valoracionCompartida != null && compartida(r.sid);
       if (conOtro) pct = cfg.valoracionCompartida;
@@ -849,7 +880,7 @@ function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
     }
     const base = r.value / (1 + ivaDe(r.tipo));
     const pago = base * pct;
-    const l = linea(key, concepto, `${Math.round(pct * 100)} %`);
+    const l = linea(key, concepto, pctTxt(pct));
     l.n += 1;
     l.base += base;
     l.pago += pago;
@@ -857,7 +888,7 @@ function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
   }
   for (const s of sessions) {
     if (!(s.date || "").startsWith(prefix) || !isDone(s, hoy, nowMin)) continue;
-    if (sessionTypeOf(s.title) !== "The Axis Club" || personKeyOfSession(s, coaches) !== k) continue;
+    if (!cfg.axisClub || sessionTypeOf(s.title) !== "The Axis Club" || personKeyOfSession(s, coaches) !== k) continue;
     const n = Math.max(0, s.booked || 0);
     const tramo = cfg.axisClub.find((t) => n <= t.max);
     const l = linea("club|" + tramo.label, `The Axis Club · ${tramo.label}`, `${tramo.eur} € / sesión`);
@@ -865,7 +896,7 @@ function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
     l.pago += tramo.eur;
     detalle.push({ date: s.date, start: s.start, tipo: "The Axis Club", quien: `${n} ${n === 1 ? "persona" : "personas"}`, origen: "Tarifa fija", base: null, pago: tramo.eur, sinBono: false });
   }
-  const orden = ["Entrenamiento personal", "Fisioterapia", "Performance Group", "val|solo", "val|otro", ...cfg.axisClub.map((t) => "club|" + t.label)];
+  const orden = ["Entrenamiento personal", "Fisioterapia", "Nutrición", "Performance Group", "val|solo", "val|otro", ...(cfg.axisClub || []).map((t) => "club|" + t.label)];
   detalle.sort((a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || "")));
   return {
     lineas: orden.filter((o) => lineas.has(o)).map((o) => lineas.get(o)),
@@ -887,7 +918,9 @@ function PagoCoach({ k, p, ledger, sessions, coaches, periodo, month, year, etiq
   const h = React.createElement;
   return h("section", { style: { ...card, overflowX: "auto", borderLeft: `6px solid ${p.color}` } },
     h("h2", { className: "axis-display", style: h2s }, "A pagar a ", p.short, " · ", etiquetaPeriodo),
-    h("p", { style: { margin: "0 0 10px", fontSize: 12, color: C_MUTED } }, "Por las sesiones ya impartidas. Porcentaje sobre el valor de cada sesión sin IVA (21 %; la fisioterapia, 0 %): lo que pagó el cliente por esa sesión de su bono. The Axis Club, tarifa fija por sesión según asistentes."),
+    h("div", { style: { margin: "6px 0 12px", padding: "10px 14px", background: C_SOFT, borderRadius: 8, fontSize: 12 } },
+      h("div", { style: { fontWeight: 700, marginBottom: 4, textTransform: "uppercase", letterSpacing: ".05em", fontSize: 11, color: C_MUTED } }, "Cómo se calcula el pago de ", p.short),
+      h("ul", { style: { margin: 0, paddingLeft: 18, lineHeight: 1.5 } }, leyendaPago(PAGO_COACH[k]).map((t) => h("li", { key: t, style: { fontWeight: 600 } }, t)), LEYENDA_COMUN.map((t) => h("li", { key: t, style: { color: C_MUTED } }, t)))),
     h("div", { className: "axis-display", style: { fontSize: 34, fontWeight: 700, margin: "4px 0 12px" } }, eur2(r.total)),
     r.lineas.length === 0 ? h("p", { style: { fontSize: 13, color: C_MUTED, margin: 0 } }, "Sin sesiones impartidas en ", etiquetaPeriodo, ".") : h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 560 } },
       h("thead", null, h("tr", null, h("th", { style: { ...th, textAlign: "left" } }, "Concepto"), h("th", { style: th }, "Sesiones"), h("th", { style: th }, "Valor sin IVA"), h("th", { style: th }, "Tarifa"), h("th", { style: th }, "A pagar"))),
