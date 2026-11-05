@@ -426,8 +426,13 @@ function productOf(conceptRaw, fallbackCat) {
     if (t.includes("mes 1")) return { familia: "Grupos", nombre: "The Axis Club · Mes 1", sesiones: null };
     return { familia: "Grupos", nombre: "The Axis Club", sesiones: null };
   }
-  // Cuota de un mes completo: cubre todas las sesiones que haga en ese mes.
-  if (t.includes("iniciacion") && t.includes("mes")) return { familia: "Entrenamiento personal", nombre: "Iniciación · Mes 1", sesiones: null, mensual: true };
+  // Pack de iniciación: el concepto dice lo que incluye, p. ej. "(ASS + 3 EP)" =
+  // valoración (asesoramiento) de 100 € + 3 sesiones de EP; "(3 EP)" = solo las sesiones.
+  if (t.includes("iniciacion") && t.includes("mes")) {
+    const ep = num(/(\d+)\s*ep\b/);
+    const ass = /\bass\b/.test(t);
+    return { familia: "Entrenamiento personal", nombre: `Iniciación · Mes 1 (${ass ? "ASS + " : ""}${ep || "?"} EP)`, sesiones: ep ? ep + (ass ? 1 : 0) : null, iniciacion: ep ? { ep, ass } : null };
+  }
   if (t.includes("performance")) return { familia: "Grupos", nombre: "Performance Group", sesiones: num(/\((\d+)\s*sesion/) || 8 };
   if (t.includes("valoraci") && area === "Nutrición") return { familia: "Nutrición", nombre: "Valoración inicial · Nutrición", sesiones: 1 };
   if (t.includes("valoraci")) return area === "Psicología" ? { familia: "Psicología", nombre: "Valoración inicial · Psicología", sesiones: 1 } : { familia: "Valoración", nombre: "Valoración inicial", sesiones: 1 };
@@ -708,18 +713,12 @@ function creditFamily(pr) {
   if (pr.familia === "Nutrición") return "Nutrición";
   return null;
 }
-const cubreMes = (c, s) => c.mensual && s.date >= c.desde && s.date < (c.hasta || c.limite);
-const SES_CUOTA_MES = ["Entrenamiento personal", "Fisioterapia", "Valoración inicial"];
-const sumarMes = (iso) => {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(Date.UTC(y, m, d)).toISOString().slice(0, 10);
-};
-const restarDias = (iso, n) => new Date(Date.parse(iso + "T00:00:00Z") - n * 864e5).toISOString().slice(0, 10);
+const PRECIO_ASS_INICIACION = 100;
 const PREFS_CREDITO = {
-  "Fisioterapia": [(c) => c.fam === "Fisioterapia", (c) => c.generic, cubreMes],
-  "Entrenamiento personal": [(c) => c.fam === "Entrenamiento personal", cubreMes],
+  "Fisioterapia": [(c) => c.fam === "Fisioterapia", (c) => c.generic],
+  "Entrenamiento personal": [(c) => c.fam === "Entrenamiento personal"],
   "Performance Group": [(c) => c.fam === "Performance Group"],
-  "Valoración inicial": [(c) => c.fam === "Valoración inicial", cubreMes],
+  "Valoración inicial": [(c) => c.fam === "Valoración inicial"],
   "Nutrición": [(c) => c.fam === "Nutrición"]
 };
 function origenLabel(pr, fam) {
@@ -735,10 +734,13 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
     const pr = productOf(p.co, p.cat);
     const fam = creditFamily(pr);
     const key = normName(p.cl);
-    if (pr.mensual && key && p.amt > 0 && p.d) {
-      // El mes empieza en su primera sesión, que puede ser hasta 7 días antes del pago.
+    if (pr.iniciacion && key && p.amt > 0) {
+      const { ep, ass } = pr.iniciacion;
       const seller = personKeyOfPayment(p) === "axis" ? null : personKeyOfPayment(p);
-      credits.set(key, [...credits.get(key) || [], { id: p.id, d: p.d, fam: "Mes", mensual: true, generic: false, left: Infinity, amt: p.amt, n: 0, desde: restarDias(p.d, 7), limite: sumarMes(p.d), hasta: null, origen: pr.nombre, seller, st: p.st }]);
+      const comun = { id: p.id, d: p.d || "", generic: false, origen: pr.nombre, seller, st: p.st };
+      const nuevos = [{ ...comun, fam: "Entrenamiento personal", left: ep, unit: (p.amt - (ass ? PRECIO_ASS_INICIACION : 0)) / ep }];
+      if (ass) nuevos.push({ ...comun, fam: "Valoración inicial", left: 1, unit: PRECIO_ASS_INICIACION });
+      credits.set(key, [...credits.get(key) || [], ...nuevos]);
       continue;
     }
     if (!fam || !pr.sesiones || !(p.amt > 0)) continue;
@@ -768,7 +770,7 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
     const c = names.filter((n) => n.startsWith(k + " ") || k.startsWith(n + " "));
     return c.length === 1 ? c[0] : k;
   };
-  const hechas = sessions.filter((s) => isDone(s, hoy, nowMin) && (tipos.includes(sessionTypeOf(s.title)) || SES_CUOTA_MES.includes(sessionTypeOf(s.title)))).sort((a, b) => ((a.date || "") + (a.start || "")).localeCompare((b.date || "") + (b.start || "")));
+  const hechas = sessions.filter((s) => isDone(s, hoy, nowMin) && tipos.includes(sessionTypeOf(s.title))).sort((a, b) => ((a.date || "") + (a.start || "")).localeCompare((b.date || "") + (b.start || "")));
   const rows = [];
   for (const s of hechas) {
     const tipo = sessionTypeOf(s.title);
@@ -783,27 +785,18 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
       const prefs = PREFS_CREDITO[tipo] || [];
       let cr = null;
       for (const f of prefs) {
-        cr = list.find((c) => c.left > 0 && f(c, s));
+        cr = list.find((c) => c.left > 0 && f(c));
         if (cr) break;
       }
       if (cr) {
         cr.left -= 1;
-        if (cr.mensual) {
-          cr.n += 1;
-          if (!cr.hasta) cr.hasta = sumarMes(s.date);
-        }
-        rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", sinBono: false, cuota: cr.mensual ? cr : null });
+        rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", sinBono: false });
       } else {
         rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: 0, origen: "Sin bono", seller: null, sinBono: true });
       }
     }
   }
-  for (const r of rows) {
-    if (!r.cuota) continue;
-    r.value = r.cuota.amt / r.cuota.n;
-    r.origen = `${r.cuota.origen} (cuota ÷ ${r.cuota.n} ${r.cuota.n === 1 ? "sesión" : "sesiones"})`;
-  }
-  return rows.filter((r) => tipos.includes(r.tipo));
+  return rows;
 }
 function valorPorPersona(rows, prefix) {
   const per = {};
@@ -878,7 +871,7 @@ function leyendaPago(cfg) {
 const LEYENDA_COMUN = [
   "Valor de una sesión = lo que pagó el cliente por esa sesión de su bono (precio del bono ÷ número de sesiones), sin IVA: 21 %, salvo fisioterapia y nutrición (0 %).",
   "Solo cuentan las sesiones ya impartidas, según el entrenador asignado en AimHarder; cada cliente de la sesión gasta una sesión de su bono, por orden de compra.",
-  "Cuota «Iniciación - Mes 1»: cubre todas las sesiones de EP, fisio y valoración de ese mes, que empieza en su primera sesión. Cada sesión vale la cuota ÷ las sesiones hechas, así que el valor baja si hace más sesiones durante el mes.",
+  "Pack «Iniciación - Mes 1»: asesoramiento (ASS) de 100 € + 3 sesiones de EP a 60 €, según lo que indique su concepto.",
   "Las sesiones sin un bono pagado que las cubra no suman (salen en naranja para revisar el cobro)."
 ];
 function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
