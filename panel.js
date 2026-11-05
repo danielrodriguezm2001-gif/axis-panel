@@ -426,6 +426,8 @@ function productOf(conceptRaw, fallbackCat) {
     if (t.includes("mes 1")) return { familia: "Grupos", nombre: "The Axis Club · Mes 1", sesiones: null };
     return { familia: "Grupos", nombre: "The Axis Club", sesiones: null };
   }
+  // Cuota de un mes completo: cubre todas las sesiones que haga en ese mes.
+  if (t.includes("iniciacion") && t.includes("mes")) return { familia: "Entrenamiento personal", nombre: "Iniciación · Mes 1", sesiones: null, mensual: true };
   if (t.includes("performance")) return { familia: "Grupos", nombre: "Performance Group", sesiones: num(/\((\d+)\s*sesion/) || 8 };
   if (t.includes("valoraci") && area === "Nutrición") return { familia: "Nutrición", nombre: "Valoración inicial · Nutrición", sesiones: 1 };
   if (t.includes("valoraci")) return area === "Psicología" ? { familia: "Psicología", nombre: "Valoración inicial · Psicología", sesiones: 1 } : { familia: "Valoración", nombre: "Valoración inicial", sesiones: 1 };
@@ -706,11 +708,18 @@ function creditFamily(pr) {
   if (pr.familia === "Nutrición") return "Nutrición";
   return null;
 }
+const cubreMes = (c, s) => c.mensual && s.date >= c.desde && s.date < (c.hasta || c.limite);
+const SES_CUOTA_MES = ["Entrenamiento personal", "Fisioterapia", "Valoración inicial"];
+const sumarMes = (iso) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m, d)).toISOString().slice(0, 10);
+};
+const restarDias = (iso, n) => new Date(Date.parse(iso + "T00:00:00Z") - n * 864e5).toISOString().slice(0, 10);
 const PREFS_CREDITO = {
-  "Fisioterapia": [(c) => c.fam === "Fisioterapia", (c) => c.generic],
-  "Entrenamiento personal": [(c) => c.fam === "Entrenamiento personal"],
+  "Fisioterapia": [(c) => c.fam === "Fisioterapia", (c) => c.generic, cubreMes],
+  "Entrenamiento personal": [(c) => c.fam === "Entrenamiento personal", cubreMes],
   "Performance Group": [(c) => c.fam === "Performance Group"],
-  "Valoración inicial": [(c) => c.fam === "Valoración inicial"],
+  "Valoración inicial": [(c) => c.fam === "Valoración inicial", cubreMes],
   "Nutrición": [(c) => c.fam === "Nutrición"]
 };
 function origenLabel(pr, fam) {
@@ -725,8 +734,14 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
   for (const p of payments) {
     const pr = productOf(p.co, p.cat);
     const fam = creditFamily(pr);
-    if (!fam || !pr.sesiones || !(p.amt > 0)) continue;
     const key = normName(p.cl);
+    if (pr.mensual && key && p.amt > 0 && p.d) {
+      // El mes empieza en su primera sesión, que puede ser hasta 7 días antes del pago.
+      const seller = personKeyOfPayment(p) === "axis" ? null : personKeyOfPayment(p);
+      credits.set(key, [...credits.get(key) || [], { id: p.id, d: p.d, fam: "Mes", mensual: true, generic: false, left: Infinity, amt: p.amt, n: 0, desde: restarDias(p.d, 7), limite: sumarMes(p.d), hasta: null, origen: pr.nombre, seller, st: p.st }]);
+      continue;
+    }
+    if (!fam || !pr.sesiones || !(p.amt > 0)) continue;
     if (!key) continue;
     const list = credits.get(key) || [];
     list.push({
@@ -753,7 +768,7 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
     const c = names.filter((n) => n.startsWith(k + " ") || k.startsWith(n + " "));
     return c.length === 1 ? c[0] : k;
   };
-  const hechas = sessions.filter((s) => isDone(s, hoy, nowMin) && tipos.includes(sessionTypeOf(s.title))).sort((a, b) => ((a.date || "") + (a.start || "")).localeCompare((b.date || "") + (b.start || "")));
+  const hechas = sessions.filter((s) => isDone(s, hoy, nowMin) && (tipos.includes(sessionTypeOf(s.title)) || SES_CUOTA_MES.includes(sessionTypeOf(s.title)))).sort((a, b) => ((a.date || "") + (a.start || "")).localeCompare((b.date || "") + (b.start || "")));
   const rows = [];
   for (const s of hechas) {
     const tipo = sessionTypeOf(s.title);
@@ -768,18 +783,27 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
       const prefs = PREFS_CREDITO[tipo] || [];
       let cr = null;
       for (const f of prefs) {
-        cr = list.find((c) => c.left > 0 && f(c));
+        cr = list.find((c) => c.left > 0 && f(c, s));
         if (cr) break;
       }
       if (cr) {
         cr.left -= 1;
-        rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", sinBono: false });
+        if (cr.mensual) {
+          cr.n += 1;
+          if (!cr.hasta) cr.hasta = sumarMes(s.date);
+        }
+        rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", sinBono: false, cuota: cr.mensual ? cr : null });
       } else {
         rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: 0, origen: "Sin bono", seller: null, sinBono: true });
       }
     }
   }
-  return rows;
+  for (const r of rows) {
+    if (!r.cuota) continue;
+    r.value = r.cuota.amt / r.cuota.n;
+    r.origen = `${r.cuota.origen} (cuota ÷ ${r.cuota.n} ${r.cuota.n === 1 ? "sesión" : "sesiones"})`;
+  }
+  return rows.filter((r) => tipos.includes(r.tipo));
 }
 function valorPorPersona(rows, prefix) {
   const per = {};
@@ -854,6 +878,7 @@ function leyendaPago(cfg) {
 const LEYENDA_COMUN = [
   "Valor de una sesión = lo que pagó el cliente por esa sesión de su bono (precio del bono ÷ número de sesiones), sin IVA: 21 %, salvo fisioterapia y nutrición (0 %).",
   "Solo cuentan las sesiones ya impartidas, según el entrenador asignado en AimHarder; cada cliente de la sesión gasta una sesión de su bono, por orden de compra.",
+  "Cuota «Iniciación - Mes 1»: cubre todas las sesiones de EP, fisio y valoración de ese mes, que empieza en su primera sesión. Cada sesión vale la cuota ÷ las sesiones hechas, así que el valor baja si hace más sesiones durante el mes.",
   "Las sesiones sin un bono pagado que las cubra no suman (salen en naranja para revisar el cobro)."
 ];
 function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
@@ -927,7 +952,7 @@ function PagoCoach({ k, p, ledger, sessions, coaches, periodo, month, year, etiq
       h("tbody", null,
         r.lineas.map((l) => h("tr", { key: l.concepto }, h("td", { style: tdL }, l.concepto), h("td", { style: { ...td, fontWeight: 700 } }, l.n), h("td", { style: td }, l.concepto.startsWith("The Axis Club") ? "–" : eur2(l.base)), h("td", { style: td }, l.regla), h("td", { style: { ...td, fontWeight: 700 } }, eur2(l.pago)))),
         h("tr", null, h("td", { style: { ...tdT, textAlign: "left" } }, "Total a pagar"), h("td", { style: tdT }, r.lineas.reduce((a, l) => a + l.n, 0)), h("td", { style: tdT }), h("td", { style: tdT }), h("td", { style: tdT }, eur2(r.total))))),
-    sinB.length > 0 && h("p", { style: { margin: "10px 0 0", fontSize: 12, color: C_WARN } }, r.sinBono.length, " ", r.sinBono.length === 1 ? "sesión" : "sesiones", " sin bono que las cubra no suman nada (revisar cobro): ", sinB.join(", "), "."),
+    sinB.length > 0 && h("p", { style: { margin: "10px 0 0", fontSize: 12, color: C_WARN } }, r.sinBono.length, " ", r.sinBono.length === 1 ? "sesión sin bono que la cubra no suma nada" : "sesiones sin bono que las cubra no suman nada", " (revisar cobro): ", sinB.join(", "), "."),
     meses.length > 0 && h("table", { style: { borderCollapse: "collapse", width: "100%", maxWidth: 360, marginTop: 14 } },
       h("thead", null, h("tr", null, h("th", { style: { ...th, textAlign: "left" } }, "Mes"), h("th", { style: th }, "A pagar"))),
       h("tbody", null, meses.map((x) => h("tr", { key: x.m }, h("td", { style: tdL }, monthLabel(x.m)), h("td", { style: { ...td, fontWeight: 700 } }, eur2(x.total)))))),
