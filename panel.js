@@ -129,7 +129,7 @@ function parseAimHarderPayments(payments) {
     if (p.id == null) continue;
     const d = dmyToISO(p.date || "");
     if (!d) continue;
-    out.push({ id: String(p.id), cl: p.name || "", cat: catFromConcept(p.concept || ""), amt: toAmt(p.amount), c: creatorId(p.creator || ""), cr: p.creator || "", co: p.concept || "", d, st: "fin", met: "" });
+    out.push({ id: String(p.id), cl: p.name || "", cat: catFromConcept(p.concept || ""), amt: toAmt(p.amount), c: creatorId(p.creator || ""), cr: p.creator || "", co: p.concept || "", d, st: "fin", met: p.method || "" });
   }
   return out;
 }
@@ -992,6 +992,7 @@ function PersonasTab({ payments, sessions, coaches, nowMin }) {
   const [month, setMonth] = useState(hoy.slice(0, 7));
   const [year, setYear] = useState(Number(hoy.slice(0, 4)));
   const [estado, setEstado] = useState("fin");
+  const [forma, setForma] = useState("todas");
   const [sel, setSel] = useState("__equipo__");
   const people = useMemo(() => buildPeople(coaches), [coaches]);
   const prefix = periodo === "mes" ? month : String(year);
@@ -1002,6 +1003,7 @@ function PersonasTab({ payments, sessions, coaches, nowMin }) {
     for (const p of payments) {
       if (!(p.d || "").startsWith(prefix)) continue;
       if (estado !== "todos" && p.st !== estado) continue;
+      if (forma !== "todas" && p.met !== forma) continue;
       const k = personKeyOfPayment(p);
       const pr = productOf(p.co, p.cat);
       const st = get(k);
@@ -1045,7 +1047,7 @@ function PersonasTab({ payments, sessions, coaches, nowMin }) {
       }
     }
     return per;
-  }, [payments, sessions, coaches, prefix, estado, nowMin]);
+  }, [payments, sessions, coaches, prefix, estado, forma, nowMin]);
   const ledger = useMemo(() => buildSessionLedger(payments, sessions, coaches, hoy, nowMin), [payments, sessions, coaches, nowMin]);
   const valor = useMemo(() => valorPorPersona(ledger, prefix), [ledger, prefix]);
   const ledgerPago = useMemo(() => buildSessionLedger(payments, sessions, coaches, hoy, nowMin, SES_PAGO), [payments, sessions, coaches, nowMin]);
@@ -1074,7 +1076,7 @@ function PersonasTab({ payments, sessions, coaches, nowMin }) {
   const ventasKeys = keys.filter((k) => stats[k].nVentas);
   const sesKeys = keys.filter((k) => stats[k].nSes);
   const PersonHead = ({ k }) => /* @__PURE__ */ React.createElement("th", { style: { ...th, textAlign: "center" } }, /* @__PURE__ */ React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700, color: C_INK } }, /* @__PURE__ */ React.createElement(Swatch, { color: P(k).color }), P(k).short));
-  return /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 14 } }, /* @__PURE__ */ React.createElement(Seg, { value: periodo, onChange: setPeriodo, options: [["mes", "Mes"], ["anio", "Año"]] }), periodo === "mes" ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setMonth(shiftMonth(month, -1)), "aria-label": "Mes anterior" }, "←"), /* @__PURE__ */ React.createElement("input", { type: "month", className: "axis-input", style: { width: 160 }, value: month, onChange: (e) => e.target.value && setMonth(e.target.value) }), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setMonth(shiftMonth(month, 1)), "aria-label": "Mes siguiente" }, "→")) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setYear(year - 1), "aria-label": "Año anterior" }, "←"), /* @__PURE__ */ React.createElement("span", { className: "axis-display", style: { fontSize: 22, fontWeight: 700 } }, year), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setYear(year + 1), "aria-label": "Año siguiente" }, "→")), /* @__PURE__ */ React.createElement("span", { style: { marginLeft: 12, fontSize: 13, color: C_MUTED } }, "Ventas:"), /* @__PURE__ */ React.createElement(Seg, { value: estado, onChange: setEstado, options: [["fin", "Cobradas"], ["pen", "Pendientes"], ["todos", "Todas"]] })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, role: "tablist", "aria-label": "Persona" }, ["__equipo__", ...keys].map((k) => {
+  return /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 14 } }, /* @__PURE__ */ React.createElement(Seg, { value: periodo, onChange: setPeriodo, options: [["mes", "Mes"], ["anio", "Año"]] }), periodo === "mes" ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setMonth(shiftMonth(month, -1)), "aria-label": "Mes anterior" }, "←"), /* @__PURE__ */ React.createElement("input", { type: "month", className: "axis-input", style: { width: 160 }, value: month, onChange: (e) => e.target.value && setMonth(e.target.value) }), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setMonth(shiftMonth(month, 1)), "aria-label": "Mes siguiente" }, "→")) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setYear(year - 1), "aria-label": "Año anterior" }, "←"), /* @__PURE__ */ React.createElement("span", { className: "axis-display", style: { fontSize: 22, fontWeight: 700 } }, year), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setYear(year + 1), "aria-label": "Año siguiente" }, "→")), /* @__PURE__ */ React.createElement("span", { style: { marginLeft: 12, fontSize: 13, color: C_MUTED } }, "Ventas:"), /* @__PURE__ */ React.createElement(Seg, { value: estado, onChange: setEstado, options: [["fin", "Cobradas"], ["pen", "Pendientes"], ["todos", "Todas"]] }), /* @__PURE__ */ React.createElement("span", { style: { marginLeft: 12, fontSize: 13, color: C_MUTED } }, "Forma de pago:"), /* @__PURE__ */ React.createElement(Seg, { value: forma, onChange: setForma, options: [["todas", "Todas"], ["efectivo", "Efectivo"], ["tarjeta", "Tarjeta"], ["transferencia", "Transferencia"]] })), forma !== "todas" && (!payments.some((p) => p.met) || estado !== "fin") && /* @__PURE__ */ React.createElement("p", { style: { margin: 0, fontSize: 12, color: C_WARN } }, !payments.some((p) => p.met) ? "Pulsa «Sincronizar ahora» para cargar la forma de pago de cada cobro." : "Los pagos pendientes aún no tienen forma de pago: con este filtro solo se cuentan los cobrados."), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, role: "tablist", "aria-label": "Persona" }, ["__equipo__", ...keys].map((k) => {
     const on = sel === k;
     const p = k === "__equipo__" ? { short: "Todo el equipo", color: C_INK } : P(k);
     return /* @__PURE__ */ React.createElement(
