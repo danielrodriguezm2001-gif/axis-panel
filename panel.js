@@ -129,7 +129,7 @@ function parseAimHarderPayments(payments) {
     if (p.id == null) continue;
     const d = dmyToISO(p.date || "");
     if (!d) continue;
-    out.push({ id: String(p.id), cl: p.name || "", cat: catFromConcept(p.concept || ""), amt: toAmt(p.amount), c: creatorId(p.creator || ""), cr: p.creator || "", co: p.concept || "", d, st: "fin", met: p.method || "" });
+    out.push({ id: String(p.id), cl: p.name || "", cat: catFromConcept(p.concept || ""), amt: toAmt(p.amount), c: creatorId(p.creator || ""), cr: p.creator || "", co: p.concept || "", d, st: "fin", met: p.method || "", em: p.issued || "" });
   }
   return out;
 }
@@ -744,7 +744,7 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
     if (pr.iniciacion && key && p.amt > 0) {
       const { ep, ass } = pr.iniciacion;
       const seller = personKeyOfPayment(p) === "axis" ? null : personKeyOfPayment(p);
-      const comun = { id: p.id, d: p.d || "", generic: false, origen: pr.nombre, seller, st: p.st };
+      const comun = { id: p.id, d: p.d || "", e: p.em || p.d || "", generic: false, origen: pr.nombre, seller, st: p.st };
       const nuevos = [{ ...comun, fam: "Entrenamiento personal", left: ep, unit: (p.amt - (ass ? PRECIO_ASS_INICIACION : 0)) / ep }];
       if (ass) nuevos.push({ ...comun, fam: "Valoración inicial", left: 1, unit: PRECIO_ASS_INICIACION });
       credits.set(key, [...credits.get(key) || [], ...nuevos]);
@@ -759,6 +759,8 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
     list.push({
       id: p.id,
       d: p.d || "",
+      // Orden de uso: fecha de emisión (en los pendientes, p.d ya es la emisión).
+      e: p.em || p.d || "",
       fam,
       // Bono sin área ("sin especificar"): solo los de EP pueden cubrir fisio.
       generic: fam === "Entrenamiento personal" && !areaOf(stripAccents(p.co || "")),
@@ -775,7 +777,7 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
     });
     credits.set(key, list);
   }
-  for (const l of credits.values()) l.sort((a, b) => a.d.localeCompare(b.d) || String(a.id).localeCompare(String(b.id), void 0, { numeric: true }));
+  for (const l of credits.values()) l.sort((a, b) => a.e.localeCompare(b.e) || String(a.id).localeCompare(String(b.id), void 0, { numeric: true }));
   const names = [...credits.keys()];
   const resolve = (raw) => {
     const k = normName(raw);
@@ -807,7 +809,7 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
       }
       if (cr) {
         cr.left -= 1;
-        rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", sinBono: false });
+        rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", cobro: cr.st === "fin" ? cr.d : null, sinBono: false });
       } else {
         rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: 0, origen: "Sin bono", seller: null, sinBono: true });
       }
@@ -888,24 +890,33 @@ function leyendaPago(cfg) {
 const LEYENDA_COMUN = [
   "Valor de una sesión = lo que pagó el cliente por esa sesión de su bono (precio del bono ÷ número de sesiones), sin IVA: 21 %, salvo fisioterapia y nutrición (0 %).",
   "Solo cuentan las sesiones ya impartidas, según el entrenador asignado en AimHarder; cada cliente de la sesión gasta una sesión de su bono, por orden de compra.",
+  "Cada sesión se paga el mes en que Axis cobra el bono del que sale (o el mes de la sesión, si el bono ya estaba cobrado). Las de bonos pendientes aparecen aparte y se pagan cuando se cobren.",
   "Pack «Iniciación - Mes 1»: asesoramiento (ASS) de 100 € + 3 sesiones de EP a 60 €, según lo que indique su concepto.",
   "Las sesiones sin un bono pagado que las cubra no suman (salen en naranja para revisar el cobro)."
 ];
+// Una sesión se paga al entrenador el mes en que Axis COBRA el bono del que sale
+// (o el mes de la sesión, si el bono ya estaba cobrado). Las sesiones de bonos
+// todavía pendientes se muestran aparte y no se pagan hasta que se cobren.
+// The Axis Club (tarifa fija) se paga en el mes de la sesión.
 function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
   const cfg = PAGO_COACH[k];
   if (!cfg) return null;
-  const lineas = /* @__PURE__ */ new Map();
-  const linea = (key, concepto, regla) => lineas.get(key) || lineas.set(key, { concepto, regla, n: 0, base: 0, pago: 0 }).get(key);
+  const finPeriodo = prefix.length === 4 ? `${prefix}-12` : prefix;
+  const grupos = { mes: /* @__PURE__ */ new Map(), atras: /* @__PURE__ */ new Map() };
+  const linea = (g, key, concepto, regla) => grupos[g].get(key) || grupos[g].set(key, { concepto, regla, n: 0, base: 0, pago: 0 }).get(key);
   const detalle = [];
+  const pendientes = [];
+  const sinBono = [];
   const porId = new Map(sessions.map((s) => [s.id, s]));
   const compartida = (sid) => {
     const v = porId.get(sid);
     return !!v && sessions.some((o) => o.id !== v.id && o.date === v.date && sessionTypeOf(o.title) === "Valoración inicial" && personKeyOfSession(o, coaches) !== k && toMin(o.start) < toMin(v.end) && toMin(v.start) < toMin(o.end));
   };
   for (const r of ledger) {
-    if (r.coach !== k || !(r.date || "").startsWith(prefix)) continue;
+    if (r.coach !== k) continue;
     let pct = cfg.pct[r.tipo];
     if (pct == null) continue;
+    const mesSesion = (r.date || "").slice(0, 7);
     let key = r.tipo, concepto = r.tipo;
     if (r.tipo === "Valoración inicial") {
       const conOtro = cfg.valoracionCompartida != null && compartida(r.sid);
@@ -915,29 +926,47 @@ function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
     }
     const base = r.value / (1 + ivaDe(r.tipo));
     const pago = base * pct;
-    const l = linea(key, concepto, pctTxt(pct));
+    const fila = { date: r.date, start: r.start, tipo: key.startsWith("val|") ? concepto : r.tipo, quien: r.client, origen: r.origen, base, pago, cobro: r.cobro || null, sinBono: r.sinBono };
+    if (r.sinBono) {
+      if (mesSesion.startsWith(prefix)) sinBono.push(fila);
+      continue;
+    }
+    if (!r.cobro) {
+      if (mesSesion <= finPeriodo) pendientes.push(fila);
+      continue;
+    }
+    const mesPago = mesSesion > r.cobro.slice(0, 7) ? mesSesion : r.cobro.slice(0, 7);
+    if (!mesPago.startsWith(prefix)) continue;
+    const g = mesSesion < mesPago ? "atras" : "mes";
+    const l = linea(g, key, concepto, pctTxt(pct));
     l.n += 1;
     l.base += base;
     l.pago += pago;
-    detalle.push({ date: r.date, start: r.start, tipo: key.startsWith("val|") ? concepto : r.tipo, quien: r.client, origen: r.origen, base, pago, sinBono: r.sinBono });
+    detalle.push({ ...fila, atras: g === "atras" });
   }
   for (const s of sessions) {
     if (!(s.date || "").startsWith(prefix) || !isDone(s, hoy, nowMin)) continue;
     if (!cfg.axisClub || sessionTypeOf(s.title) !== "The Axis Club" || personKeyOfSession(s, coaches) !== k) continue;
     const n = Math.max(0, s.booked || 0);
     const tramo = cfg.axisClub.find((t) => n <= t.max);
-    const l = linea("club|" + tramo.label, `The Axis Club · ${tramo.label}`, `${tramo.eur} € / sesión`);
+    const l = linea("mes", "club|" + tramo.label, `The Axis Club · ${tramo.label}`, `${tramo.eur} € / sesión`);
     l.n += 1;
     l.pago += tramo.eur;
-    detalle.push({ date: s.date, start: s.start, tipo: "The Axis Club", quien: `${n} ${n === 1 ? "persona" : "personas"}`, origen: "Tarifa fija", base: null, pago: tramo.eur, sinBono: false });
+    detalle.push({ date: s.date, start: s.start, tipo: "The Axis Club", quien: `${n} ${n === 1 ? "persona" : "personas"}`, origen: "Tarifa fija", base: null, pago: tramo.eur, cobro: null, sinBono: false, atras: false, club: true });
   }
   const orden = ["Entrenamiento personal", "Fisioterapia", "Nutrición", "Performance Group", "val|solo", "val|otro", ...(cfg.axisClub || []).map((t) => "club|" + t.label)];
-  detalle.sort((a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || "")));
+  const lista = (g) => orden.filter((o) => grupos[g].has(o)).map((o) => grupos[g].get(o));
+  const suma = (xs, f) => xs.reduce((a, x) => a + x[f], 0);
+  const porFecha = (a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || ""));
+  const mes = lista("mes"), atras = lista("atras");
   return {
-    lineas: orden.filter((o) => lineas.has(o)).map((o) => lineas.get(o)),
-    detalle,
-    sinBono: detalle.filter((d) => d.sinBono),
-    total: [...lineas.values()].reduce((a, l) => a + l.pago, 0)
+    mes, atras,
+    totalMes: suma(mes, "pago"),
+    totalAtras: suma(atras, "pago"),
+    total: suma(mes, "pago") + suma(atras, "pago"),
+    detalle: detalle.sort(porFecha),
+    pendientes: pendientes.sort(porFecha),
+    sinBono: sinBono.sort(porFecha)
   };
 }
 function PagoCoach({ k, p, ledger, sessions, coaches, periodo, month, year, etiquetaPeriodo, hoy, nowMin }) {
@@ -945,32 +974,53 @@ function PagoCoach({ k, p, ledger, sessions, coaches, periodo, month, year, etiq
   const prefix = periodo === "mes" ? month : String(year);
   const r = pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin);
   if (!r) return null;
-  const meses = periodo === "mes" ? [] : Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`).map((m) => ({ m, total: pagoCoach(k, ledger, sessions, coaches, m, hoy, nowMin).total })).filter((x) => x.total > 0);
+  const meses = periodo === "mes" ? [] : Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`).map((m) => {
+    const x = pagoCoach(k, ledger, sessions, coaches, m, hoy, nowMin);
+    return { m, mes: x.totalMes, atras: x.totalAtras, total: x.total };
+  }).filter((x) => x.total > 0);
+  const nombreMes = periodo === "mes" ? monthLabel(month).split(" ")[0].toLowerCase() : null;
+  const titulos = periodo === "mes"
+    ? { mes: `Sesiones de ${nombreMes} ya cobradas`, atras: `Sesiones de meses anteriores cobradas en ${nombreMes}` }
+    : { mes: "Sesiones cobradas en su mismo mes", atras: "Sesiones de meses anteriores cobradas más tarde" };
   const tdT = { ...td, fontWeight: 800, borderTop: `2px solid ${C_INK}` };
   const tdL = { ...td, textAlign: "left" };
-  const fmtD = (d) => d.slice(8, 10) + "/" + d.slice(5, 7);
-  const sinB = [...new Set(r.sinBono.map((d) => d.quien))];
+  const tdG = { padding: "12px 10px 4px", fontSize: 11, fontWeight: 700, color: C_MUTED, textTransform: "uppercase", letterSpacing: ".05em" };
+  const fmtD = (d) => d ? d.slice(8, 10) + "/" + d.slice(5, 7) + (d.slice(0, 4) !== String(year) && d.slice(0, 4) !== month.slice(0, 4) ? "/" + d.slice(2, 4) : "") : "–";
   const h = React.createElement;
+  const filasGrupo = (g, lineas, subtotal) => lineas.length === 0 ? null : h(React.Fragment, { key: g },
+    h("tr", null, h("td", { style: tdG, colSpan: 4 }, titulos[g]), h("td", { style: { ...tdG, textAlign: "right" } }, eur2(subtotal))),
+    lineas.map((l) => h("tr", { key: g + l.concepto }, h("td", { style: { ...tdL, paddingLeft: 18 } }, l.concepto), h("td", { style: { ...td, fontWeight: 700 } }, l.n), h("td", { style: td }, l.concepto.startsWith("The Axis Club") ? "–" : eur2(l.base)), h("td", { style: td }, l.regla), h("td", { style: { ...td, fontWeight: 700 } }, eur2(l.pago)))));
+  const pend = { n: r.pendientes.length, pago: r.pendientes.reduce((a, x) => a + x.pago, 0) };
+  const pendPorCliente = Object.entries(r.pendientes.reduce((m, x) => ((m[x.quien] = m[x.quien] || []).push(x), m), {})).sort((a, b) => b[1].length - a[1].length);
+  const sinB = [...new Set(r.sinBono.map((d) => d.quien))];
+  const todas = [...r.detalle, ...r.pendientes.map((x) => ({ ...x, pendiente: true })), ...r.sinBono].sort((a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || "")));
+  const estado = (d) => d.club ? "Tarifa fija" : d.sinBono ? "Sin bono" : d.pendiente ? "Pendiente de cobro" : `Cobrado ${fmtD(d.cobro)}`;
   return h("section", { style: { ...card, overflowX: "auto", borderLeft: `6px solid ${p.color}` } },
     h("h2", { className: "axis-display", style: h2s }, "A pagar a ", p.short, " · ", etiquetaPeriodo),
     h("div", { style: { margin: "6px 0 12px", padding: "10px 14px", background: C_SOFT, borderRadius: 8, fontSize: 12 } },
       h("div", { style: { fontWeight: 700, marginBottom: 4, textTransform: "uppercase", letterSpacing: ".05em", fontSize: 11, color: C_MUTED } }, "Cómo se calcula el pago de ", p.short),
       h("ul", { style: { margin: 0, paddingLeft: 18, lineHeight: 1.5 } }, leyendaPago(PAGO_COACH[k]).map((t) => h("li", { key: t, style: { fontWeight: 600 } }, t)), LEYENDA_COMUN.map((t) => h("li", { key: t, style: { color: C_MUTED } }, t)))),
     h("div", { className: "axis-display", style: { fontSize: 34, fontWeight: 700, margin: "4px 0 12px" } }, eur2(r.total)),
-    r.lineas.length === 0 ? h("p", { style: { fontSize: 13, color: C_MUTED, margin: 0 } }, "Sin sesiones impartidas en ", etiquetaPeriodo, ".") : h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 560 } },
+    r.mes.length + r.atras.length === 0 ? h("p", { style: { fontSize: 13, color: C_MUTED, margin: 0 } }, "Nada cobrado que pagar en ", etiquetaPeriodo, ".") : h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 560 } },
       h("thead", null, h("tr", null, h("th", { style: { ...th, textAlign: "left" } }, "Concepto"), h("th", { style: th }, "Sesiones"), h("th", { style: th }, "Valor sin IVA"), h("th", { style: th }, "Tarifa"), h("th", { style: th }, "A pagar"))),
       h("tbody", null,
-        r.lineas.map((l) => h("tr", { key: l.concepto }, h("td", { style: tdL }, l.concepto), h("td", { style: { ...td, fontWeight: 700 } }, l.n), h("td", { style: td }, l.concepto.startsWith("The Axis Club") ? "–" : eur2(l.base)), h("td", { style: td }, l.regla), h("td", { style: { ...td, fontWeight: 700 } }, eur2(l.pago)))),
-        h("tr", null, h("td", { style: { ...tdT, textAlign: "left" } }, "Total a pagar"), h("td", { style: tdT }, r.lineas.reduce((a, l) => a + l.n, 0)), h("td", { style: tdT }), h("td", { style: tdT }), h("td", { style: tdT }, eur2(r.total))))),
+        filasGrupo("mes", r.mes, r.totalMes),
+        filasGrupo("atras", r.atras, r.totalAtras),
+        h("tr", null, h("td", { style: { ...tdT, textAlign: "left" } }, "Total a pagar"), h("td", { style: tdT }, [...r.mes, ...r.atras].reduce((a, l) => a + l.n, 0)), h("td", { style: tdT }), h("td", { style: tdT }), h("td", { style: tdT }, eur2(r.total))))),
+    pend.n > 0 && h("div", { style: { marginTop: 14, padding: "10px 14px", border: `1px dashed ${C_LINE}`, borderRadius: 8, fontSize: 12 } },
+      h("div", { style: { fontWeight: 700, fontSize: 13 } }, "Pendiente de cobro (no se paga todavía): ", pend.n, " ", pend.n === 1 ? "sesión" : "sesiones", " · ", eur2(pend.pago)),
+      h("div", { style: { color: C_MUTED, margin: "2px 0 6px" } }, "Sesiones ya impartidas", periodo === "mes" ? ` hasta ${nombreMes}` : "", " de bonos que el cliente aún no ha pagado. Se pagarán el mes en que se cobren."),
+      h("ul", { style: { margin: 0, paddingLeft: 18, lineHeight: 1.5 } }, pendPorCliente.map(([c, xs]) => h("li", { key: c }, h("b", null, c), " · ", xs.length, " ", xs.length === 1 ? "sesión" : "sesiones", " (", xs.map((x) => fmtD(x.date)).join(", "), ") · ", eur2(xs.reduce((a, x) => a + x.pago, 0)))))),
     sinB.length > 0 && h("p", { style: { margin: "10px 0 0", fontSize: 12, color: C_WARN } }, r.sinBono.length, " ", r.sinBono.length === 1 ? "sesión sin bono que la cubra no suma nada" : "sesiones sin bono que las cubra no suman nada", " (revisar cobro): ", sinB.join(", "), "."),
-    meses.length > 0 && h("table", { style: { borderCollapse: "collapse", width: "100%", maxWidth: 360, marginTop: 14 } },
-      h("thead", null, h("tr", null, h("th", { style: { ...th, textAlign: "left" } }, "Mes"), h("th", { style: th }, "A pagar"))),
-      h("tbody", null, meses.map((x) => h("tr", { key: x.m }, h("td", { style: tdL }, monthLabel(x.m)), h("td", { style: { ...td, fontWeight: 700 } }, eur2(x.total)))))),
-    r.detalle.length > 0 && h("details", { style: { marginTop: 14 } },
-      h("summary", { style: { cursor: "pointer", fontSize: 13, fontWeight: 700 } }, "Ver el cálculo sesión a sesión (", r.detalle.length, ")"),
-      h("div", { style: { overflowX: "auto", marginTop: 8 } }, h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 640 } },
-        h("thead", null, h("tr", null, ["Fecha", "Hora", "Tipo", "Cliente / asistentes", "Bono de origen"].map((t) => h("th", { key: t, style: { ...th, textAlign: "left" } }, t)), h("th", { style: th }, "Valor sin IVA"), h("th", { style: th }, "A pagar"))),
-        h("tbody", null, r.detalle.map((d, i) => h("tr", { key: i, style: { background: d.sinBono ? "#FEF3E7" : void 0 } }, h("td", { style: tdL }, fmtD(d.date)), h("td", { style: tdL }, d.start || "–"), h("td", { style: tdL }, d.tipo), h("td", { style: tdL }, d.quien), h("td", { style: { ...tdL, color: d.sinBono ? C_WARN : void 0 } }, d.origen), h("td", { style: td }, d.base == null ? "–" : eur2(d.base)), h("td", { style: { ...td, fontWeight: 700 } }, eur2(d.pago)))))))));
+    meses.length > 0 && h("table", { style: { borderCollapse: "collapse", width: "100%", maxWidth: 520, marginTop: 14 } },
+      h("thead", null, h("tr", null, h("th", { style: { ...th, textAlign: "left" } }, "Mes de pago"), h("th", { style: th }, "Del mes"), h("th", { style: th }, "Atrasadas"), h("th", { style: th }, "A pagar"))),
+      h("tbody", null, meses.map((x) => h("tr", { key: x.m }, h("td", { style: tdL }, monthLabel(x.m)), h("td", { style: td }, eur2(x.mes)), h("td", { style: td }, x.atras ? eur2(x.atras) : "–"), h("td", { style: { ...td, fontWeight: 700 } }, eur2(x.total)))))),
+    todas.length > 0 && h("details", { style: { marginTop: 14 } },
+      h("summary", { style: { cursor: "pointer", fontSize: 13, fontWeight: 700 } }, "Ver el cálculo sesión a sesión (", todas.length, ")"),
+      h("div", { style: { overflowX: "auto", marginTop: 8 } }, h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 720 } },
+        h("thead", null, h("tr", null, ["Fecha", "Hora", "Tipo", "Cliente / asistentes", "Bono de origen", "Cobro"].map((t) => h("th", { key: t, style: { ...th, textAlign: "left" } }, t)), h("th", { style: th }, "Valor sin IVA"), h("th", { style: th }, "A pagar"))),
+        h("tbody", null, todas.map((d, i) => h("tr", { key: i, style: { background: d.sinBono ? "#FEF3E7" : d.pendiente ? C_SOFT : d.atras ? "#EEF4FB" : void 0, color: d.pendiente ? C_MUTED : void 0 } }, h("td", { style: tdL }, fmtD(d.date)), h("td", { style: tdL }, d.start || "–"), h("td", { style: tdL }, d.tipo), h("td", { style: tdL }, d.quien), h("td", { style: { ...tdL, color: d.sinBono ? C_WARN : void 0 } }, d.origen), h("td", { style: { ...tdL, color: d.sinBono ? C_WARN : void 0 } }, estado(d)), h("td", { style: td }, d.base == null ? "–" : eur2(d.base)), h("td", { style: { ...td, fontWeight: 700 } }, d.pendiente || d.sinBono ? "–" : eur2(d.pago))))))),
+      h("p", { style: { margin: "6px 0 0", fontSize: 11, color: C_MUTED } }, "Azul: sesión de un mes anterior que se paga ahora porque se ha cobrado ahora. Gris: pendiente de cobro, aún no se paga. Naranja: sin bono que la cubra.")));
 }
 function ValorEquipo({ valor, P, etiquetaPeriodo }) {
   const ks = sortPeople(Object.keys(valor).filter((k) => valor[k].n || valor[k].cedidas.n));
