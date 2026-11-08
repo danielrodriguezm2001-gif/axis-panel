@@ -433,14 +433,14 @@ function productOf(conceptRaw, fallbackCat) {
     const ass = /\bass\b/.test(t);
     return { familia: "Entrenamiento personal", nombre: `Iniciación · Mes 1 (${ass ? "ASS + " : ""}${ep || "?"} EP)`, sesiones: ep ? ep + (ass ? 1 : 0) : null, iniciacion: ep ? { ep, ass } : null };
   }
-  if (t.includes("performance")) return { familia: "Grupos", nombre: "Performance Group", sesiones: num(/\((\d+)\s*sesion/) || 8 };
+  if (t.includes("performance")) return { familia: "Grupos", nombre: "Performance Group", sesiones: num(/\((\d+)\s*sesion/) || 8, sesionesFijas: !!num(/\((\d+)\s*sesion/) };
   if (t.includes("valoraci") && area === "Nutrición") return { familia: "Nutrición", nombre: "Valoración inicial · Nutrición", sesiones: 1 };
   if (t.includes("valoraci")) return area === "Psicología" ? { familia: "Psicología", nombre: "Valoración inicial · Psicología", sesiones: 1 } : { familia: "Valoración", nombre: "Valoración inicial", sesiones: 1 };
   // Pack trimestral: valoración inicial + entrega del pack nutricional + 2 seguimientos.
   if (t.includes("trimestral") && area === "Nutrición") return { familia: "Nutrición", nombre: "Pack trimestral · Nutrición", sesiones: 4 };
   if (t.includes("grupo")) {
     const n = num(/\((\d+)\s*sesion/);
-    return { familia: "Grupos", nombre: "Grupo reducido" + (n ? ` (${n} sesiones)` : ""), sesiones: n };
+    return { familia: "Grupos", nombre: "Grupo reducido" + (n ? ` (${n} sesiones)` : ""), sesiones: n, sesionesFijas: !!n };
   }
   if (t.includes("bono") || t.includes("pack")) {
     const n = num(/(?:bono|pack)\s*(\d+(?:[.,]\d+)?)/);
@@ -708,12 +708,14 @@ const normName = (s) => stripAccents(s).replace(/[^a-z0-9 ]/g, " ").replace(/\s+
 function creditFamily(pr) {
   if (pr.familia === "Fisioterapia") return "Fisioterapia";
   if (pr.familia === "Entrenamiento personal") return "Entrenamiento personal";
-  if (pr.nombre === "Performance Group") return "Performance Group";
+  // «Grupo reducido» es el nombre antiguo del Performance Group (mismo precio, mismas clases).
+  if (pr.nombre === "Performance Group" || pr.nombre.startsWith("Grupo reducido")) return "Performance Group";
   if (pr.familia === "Valoración") return "Valoración inicial";
   if (pr.familia === "Nutrición") return "Nutrición";
   return null;
 }
 const PRECIO_ASS_INICIACION = 100;
+const PRECIO_SESION_PG = 45;
 const PREFS_CREDITO = {
   "Fisioterapia": [(c) => c.fam === "Fisioterapia", (c) => c.generic],
   "Entrenamiento personal": [(c) => c.fam === "Entrenamiento personal"],
@@ -736,7 +738,7 @@ function mesDelConcepto(concepto) {
 function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SES_VALORADAS) {
   const credits = /* @__PURE__ */ new Map();
   for (const p of payments) {
-    const pr = productOf(p.co, p.cat);
+    let pr = productOf(p.co, p.cat);
     const fam = creditFamily(pr);
     const key = normName(p.cl);
     if (pr.iniciacion && key && p.amt > 0) {
@@ -748,6 +750,9 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
       credits.set(key, [...credits.get(key) || [], ...nuevos]);
       continue;
     }
+    // Performance Group sin número de sesiones en el concepto: a 45 € la sesión
+    // (360 € = 8). Así una sesión suelta de 45 € no cuenta como un bono de 8.
+    if (fam === "Performance Group" && !pr.sesionesFijas && p.amt > 0) pr = { ...pr, sesiones: Math.max(1, Math.round(p.amt / PRECIO_SESION_PG)) };
     if (!fam || !pr.sesiones || !(p.amt > 0)) continue;
     if (!key) continue;
     const list = credits.get(key) || [];
@@ -785,6 +790,8 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
     const coach = personKeyOfSession(s, coaches);
     const clientes = String(s.client || "").split(",").map((x) => x.trim()).filter(Boolean);
     if (!clientes.length) {
+      // Una clase de grupo sin nadie apuntado no es un cobro pendiente.
+      if (TIPOS_GRUPALES.includes(tipo)) continue;
       rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: "(sin cliente)", value: 0, origen: "Sin bono", seller: null, sinBono: true });
       continue;
     }
