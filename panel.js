@@ -728,6 +728,11 @@ function origenLabel(pr, fam) {
   const base = n === 1 ? "Sesión suelta" : `Bono ${String(n).replace(".", ",")} sesiones`;
   return `${base} · ${fam === "Fisioterapia" ? "Fisio" : "EP"}`;
 }
+// "Sesión individual ENTRENAMIENTO PERSONAL 7/2026" -> "2026-07"
+function mesDelConcepto(concepto) {
+  const m = String(concepto || "").match(/(\d{1,2})\/(\d{4})\s*$/);
+  return m ? `${m[2]}-${m[1].padStart(2, "0")}` : null;
+}
 function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SES_VALORADAS) {
   const credits = /* @__PURE__ */ new Map();
   for (const p of payments) {
@@ -753,6 +758,9 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
       // Bono sin área ("sin especificar"): solo los de EP pueden cubrir fisio.
       generic: fam === "Entrenamiento personal" && !areaOf(stripAccents(p.co || "")),
       left: pr.sesiones,
+      // Sesión suelta con mes en el concepto ("… 11/2026"): es para una sesión de
+      // ese mes, así que no puede tapar el hueco de una sesión sin pagar de antes.
+      mes: pr.sesiones === 1 ? mesDelConcepto(p.co) : null,
       unit: p.amt / pr.sesiones,
       origen: origenLabel(pr, fam),
       // Axis (cuenta del centro) solo vende The Axis Club: un bono de EP o fisio
@@ -784,8 +792,10 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
       const list = credits.get(resolve(cl)) || [];
       const prefs = PREFS_CREDITO[tipo] || [];
       let cr = null;
+      const mesS = (s.date || "").slice(0, 7);
+      const libre = (c) => c.left > 0 && (!c.mes || c.mes <= mesS);
       for (const f of prefs) {
-        cr = list.find((c) => c.left > 0 && f(c));
+        cr = list.find((c) => libre(c) && f(c) && c.mes === mesS) || list.find((c) => libre(c) && f(c));
         if (cr) break;
       }
       if (cr) {
