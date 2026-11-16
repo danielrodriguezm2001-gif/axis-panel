@@ -907,11 +907,13 @@ function valorPorPersona(rows, prefix) {
 // SIN IVA (lo que pagó el cliente por esa sesión de su bono, quitando el IVA);
 // The Axis Club se paga a precio fijo por sesión según los asistentes.
 // IVA por tipo de sesión: fisioterapia y nutrición están exentas (0 %); el resto, 21 %.
-const ivaDe = (tipo) => tipo === "Fisioterapia" || tipo === "Nutrición" ? 0 : 0.21;
+// Además, las valoraciones iniciales de Erik (fisioterapeuta) van sin IVA.
+const IVA_0_POR_COACH = { erik: ["Valoración inicial"] };
+const ivaDe = (tipo, coach) => tipo === "Fisioterapia" || tipo === "Nutrición" || (IVA_0_POR_COACH[coach] || []).includes(tipo) ? 0 : 0.21;
 const PCT_100 = { "Entrenamiento personal": 1, "Fisioterapia": 1, "Performance Group": 1, "Valoración inicial": 1 };
 const PAGO_COACH = {
   marc: { pct: PCT_100, notas: ["The Axis Club no suma en su pago."] },
-  erik: { pct: PCT_100, notas: ["The Axis Club no suma en su pago."] },
+  erik: { pct: PCT_100, notas: ["The Axis Club no suma en su pago.", "Sus valoraciones iniciales van sin IVA (0 %), como la fisioterapia."] },
   marti: {
     pct: { "Nutrición": 0.7, "Fisioterapia": 0.7 },
     notas: ["Pack trimestral de nutrición = 4 sesiones: valoración inicial, entrega del pack nutricional y 2 seguimientos (precio del pack ÷ 4 por sesión).", "Martí es el único nutricionista: los packs de nutrición solo cubren sus sesiones de nutrición."]
@@ -940,7 +942,7 @@ function leyendaPago(cfg) {
   return [...l, ...cfg.notas || []];
 }
 const LEYENDA_COMUN = [
-  "Valor de una sesión = lo que pagó el cliente por esa sesión de su bono (precio del bono ÷ número de sesiones), sin IVA: 21 %, salvo fisioterapia y nutrición (0 %).",
+  "Valor de una sesión = lo que pagó el cliente por esa sesión de su bono (precio del bono ÷ número de sesiones), sin IVA: 21 %, salvo fisioterapia, nutrición y las valoraciones de Erik (0 %).",
   "Solo cuentan las sesiones ya impartidas, según el entrenador asignado en AimHarder; cada cliente de la sesión gasta una sesión de su bono, por orden de compra.",
   "Cada sesión se paga el mes en que Axis cobra el bono del que sale (o el mes de la sesión, si el bono ya estaba cobrado). Las de bonos pendientes aparecen aparte y se pagan cuando se cobren.",
   "Pack «Iniciación - Mes 1»: asesoramiento (ASS) de 100 € + 3 sesiones de EP a 60 €, según lo que indique su concepto.",
@@ -976,7 +978,7 @@ function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
       key = conOtro ? "val|otro" : "val|solo";
       concepto = conOtro ? "Valoración inicial (con otro entrenador)" : "Valoración inicial (solo)";
     }
-    const base = r.value / (1 + ivaDe(r.tipo));
+    const base = r.value / (1 + ivaDe(r.tipo, k));
     const pago = base * pct;
     const fila = { date: r.date, start: r.start, tipo: key.startsWith("val|") ? concepto : r.tipo, quien: r.client, origen: r.origen, base, pago, cobro: r.cobro || null, sinBono: r.sinBono };
     if (r.sinBono) {
