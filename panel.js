@@ -750,6 +750,15 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
       credits.set(key, [...credits.get(key) || [], ...nuevos]);
       continue;
     }
+    // Pago agrupado en AimHarder ("Sesión individual 9/2026 + Sesión individual … + …"):
+    // AimHarder corta el concepto, así que no se sabe cuántas sesiones lleva. Cubre
+    // las sesiones que ese entrenador dio a ese cliente hasta la fecha del pago y que
+    // no tengan otro pago; el importe se reparte entre ellas.
+    if (/ \+ /.test(p.co || "") && !stripAccents(p.co || "").includes("iniciacion") && key && p.amt > 0) {
+      const seller = personKeyOfPayment(p) === "axis" ? null : personKeyOfPayment(p);
+      credits.set(key, [...credits.get(key) || [], { id: p.id, d: p.d || "", e: p.em || p.d || "", fam: "Agrupado", agrupado: true, generic: false, left: Infinity, amt: p.amt, n: 0, hasta: p.em || p.d || "", origen: "Pago agrupado", seller, st: p.st }]);
+      continue;
+    }
     // Performance Group sin número de sesiones en el concepto: a 45 € la sesión
     // (360 € = 8). Así una sesión suelta de 45 € no cuenta como un bono de 8.
     if (fam === "Performance Group" && !pr.sesionesFijas && p.amt > 0) pr = { ...pr, sesiones: Math.max(1, Math.round(p.amt / PRECIO_SESION_PG)) };
@@ -768,6 +777,7 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
       // Sesión suelta con mes en el concepto ("… 11/2026"): es para una sesión de
       // ese mes, así que no puede tapar el hueco de una sesión sin pagar de antes.
       mes: pr.sesiones === 1 ? mesDelConcepto(p.co) : null,
+      uno: pr.sesiones === 1,
       unit: p.amt / pr.sesiones,
       origen: origenLabel(pr, fam),
       // Axis (cuenta del centro) solo vende The Axis Club: un bono de EP o fisio
@@ -787,6 +797,24 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
   };
   const hechas = sessions.filter((s) => isDone(s, hoy, nowMin) && tipos.includes(sessionTypeOf(s.title))).sort((a, b) => ((a.date || "") + (a.start || "")).localeCompare((b.date || "") + (b.start || "")));
   const rows = [];
+  // 1.ª pasada: cada sesión se reserva la sesión suelta que su entrenador emitió
+  // ESE MISMO DÍA (es su pago). Así una sesión anterior no se la queda.
+  const reservado = /* @__PURE__ */ new Map();
+  for (const s of hechas) {
+    const tipo = sessionTypeOf(s.title);
+    const coach = personKeyOfSession(s, coaches);
+    for (const cl of String(s.client || "").split(",").map((x) => x.trim()).filter(Boolean)) {
+      const list = credits.get(resolve(cl)) || [];
+      for (const f of PREFS_CREDITO[tipo] || []) {
+        const cr = list.find((c) => c.left > 0 && c.uno && c.e === s.date && (!c.seller || c.seller === coach) && f(c));
+        if (cr) {
+          cr.left -= 1;
+          reservado.set(s.id + "|" + cl, cr);
+          break;
+        }
+      }
+    }
+  }
   for (const s of hechas) {
     const tipo = sessionTypeOf(s.title);
     const coach = personKeyOfSession(s, coaches);
@@ -800,20 +828,41 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
     for (const cl of clientes) {
       const list = credits.get(resolve(cl)) || [];
       const prefs = PREFS_CREDITO[tipo] || [];
-      let cr = null;
+      let cr = reservado.get(s.id + "|" + cl) || null;
+      if (cr) cr.left += 1;
       const mesS = (s.date || "").slice(0, 7);
       const libre = (c) => c.left > 0 && (!c.mes || c.mes <= mesS);
-      for (const f of prefs) {
-        cr = list.find((c) => libre(c) && f(c) && c.mes === mesS) || list.find((c) => libre(c) && f(c));
+      // Una sesión suelta la vende quien la imparte: va primero a una sesión de
+      // ese entrenador del mismo día y luego del mismo mes. Y no se gasta en la
+      // sesión de otro entrenador mientras haya otro pago que la cubra.
+      const suyo = (c) => !c.uno || !c.seller || c.seller === coach;
+      for (const f of cr ? [] : prefs) {
+        const ok = (c) => libre(c) && f(c);
+        cr = list.find((c) => ok(c) && c.uno && suyo(c) && c.e === s.date)
+          || list.find((c) => ok(c) && c.uno && suyo(c) && c.mes === mesS)
+          || list.find((c) => ok(c) && suyo(c));
+        if (cr) break;
+      }
+      if (!cr) cr = list.find((c) => c.agrupado && (!c.seller || c.seller === coach) && s.date <= c.hasta) || null;
+      for (const f of cr ? [] : prefs) {
+        cr = list.find((c) => libre(c) && f(c));
         if (cr) break;
       }
       if (cr) {
         cr.left -= 1;
-        rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", cobro: cr.st === "fin" ? cr.d : null, sinBono: false });
+        if (cr.agrupado) cr.n += 1;
+        rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", cobro: cr.st === "fin" ? cr.d : null, sinBono: false, agrupado: cr.agrupado ? cr : null });
       } else {
         rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: 0, origen: "Sin bono", seller: null, sinBono: true });
       }
     }
+  }
+  for (const r of rows) {
+    if (!r.agrupado) continue;
+    const g = r.agrupado;
+    r.value = g.amt / g.n;
+    r.origen = `Pago agrupado (${Math.round(g.amt)} € ÷ ${g.n} ${g.n === 1 ? "sesión" : "sesiones"})`;
+    delete r.agrupado;
   }
   return rows;
 }
