@@ -127,7 +127,7 @@ function parseAimHarderPayments(payments) {
   }
   for (const p of payments.paid || []) {
     if (p.id == null) continue;
-    const d = dmyToISO(p.date || "");
+    const d = dmyToISO(p.date || "") || p.issued || "";
     if (!d) continue;
     out.push({ id: String(p.id), cl: p.name || "", cat: catFromConcept(p.concept || ""), amt: toAmt(p.amount), c: creatorId(p.creator || ""), cr: p.creator || "", co: p.concept || "", d, st: "fin", met: p.method || "", em: p.issued || "" });
   }
@@ -233,7 +233,8 @@ function parseAimHarder(json, fallbackDate, coaches, rooms) {
     const roomName = asName(pick(r, ["salaname", "room", "trainingRoom", "training_room", "roomName", "space", "location"]));
     const title = asName(pick(r, ["className", "name", "class", "activity", "concept", "title", "type"])) || "Sesi\xF3n";
     const athletesArr = Array.isArray(r.athletes) ? r.athletes : [];
-    const client = asName(((_c = athletesArr[0]) == null ? void 0 : _c.realName) || ((_d = athletesArr[0]) == null ? void 0 : _d.name)) || asName(pick(r, ["client", "customer", "member", "athlete"]));
+    // Todos los asistentes de la reserva (una clase de grupo trae varios), sin comas en el nombre.
+    const client = athletesArr.map((a) => asName((a == null ? void 0 : a.realName) || (a == null ? void 0 : a.name)).replace(/,/g, " ").trim()).filter(Boolean).join(", ") || asName(pick(r, ["client", "customer", "member", "athlete"]));
     const capacityRaw = pick(r, ["limit", "classLimit", "totalSpaces", "spaces", "capacity", "numSpaces", "max", "maxAthletes", "aforo", "limitAthletes", "totalLimit", "boxLimit"]);
     const capacity = capacityRaw !== void 0 && capacityRaw !== null && !Number.isNaN(+capacityRaw) && +capacityRaw > 0 ? +capacityRaw : null;
     const booked = athletesArr.length;
@@ -1197,7 +1198,7 @@ function PersonasTab({ payments, sessions, coaches, nowMin }) {
   const ventasKeys = keys.filter((k) => stats[k].nVentas);
   const sesKeys = keys.filter((k) => stats[k].nSes);
   const PersonHead = ({ k }) => /* @__PURE__ */ React.createElement("th", { style: { ...th, textAlign: "center" } }, /* @__PURE__ */ React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700, color: C_INK } }, /* @__PURE__ */ React.createElement(Swatch, { color: P(k).color }), P(k).short));
-  return /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 14 } }, /* @__PURE__ */ React.createElement(Seg, { value: periodo, onChange: setPeriodo, options: [["mes", "Mes"], ["anio", "Año"]] }), periodo === "mes" ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setMonth(shiftMonth(month, -1)), "aria-label": "Mes anterior" }, "←"), /* @__PURE__ */ React.createElement("input", { type: "month", className: "axis-input", style: { width: 160 }, value: month, onChange: (e) => e.target.value && setMonth(e.target.value) }), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setMonth(shiftMonth(month, 1)), "aria-label": "Mes siguiente" }, "→")) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setYear(year - 1), "aria-label": "Año anterior" }, "←"), /* @__PURE__ */ React.createElement("span", { className: "axis-display", style: { fontSize: 22, fontWeight: 700 } }, year), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setYear(year + 1), "aria-label": "Año siguiente" }, "→")), /* @__PURE__ */ React.createElement("span", { style: { marginLeft: 12, fontSize: 13, color: C_MUTED } }, "Ventas:"), /* @__PURE__ */ React.createElement(Seg, { value: estado, onChange: setEstado, options: [["fin", "Cobradas"], ["pen", "Pendientes"], ["todos", "Todas"]] }), /* @__PURE__ */ React.createElement("span", { style: { marginLeft: 12, fontSize: 13, color: C_MUTED } }, "Forma de pago:"), /* @__PURE__ */ React.createElement(Seg, { value: forma, onChange: setForma, options: [["todas", "Todas"], ["efectivo", "Efectivo"], ["tarjeta", "Tarjeta"], ["transferencia", "Transferencia"]] })), forma !== "todas" && (!payments.some((p) => p.met) || estado !== "fin") && /* @__PURE__ */ React.createElement("p", { style: { margin: 0, fontSize: 12, color: C_WARN } }, !payments.some((p) => p.met) ? "Pulsa «Sincronizar ahora» para cargar la forma de pago de cada cobro." : "Los pagos pendientes aún no tienen forma de pago: con este filtro solo se cuentan los cobrados."), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, role: "tablist", "aria-label": "Persona" }, ["__equipo__", ...keys].map((k) => {
+  return /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 14 } }, /* @__PURE__ */ React.createElement(Seg, { value: periodo, onChange: setPeriodo, options: [["mes", "Mes"], ["anio", "Año"]] }), periodo === "mes" ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setMonth(shiftMonth(month, -1)), "aria-label": "Mes anterior" }, "←"), /* @__PURE__ */ React.createElement("input", { type: "month", className: "axis-input", style: { width: 160 }, value: month, onChange: (e) => e.target.value && setMonth(e.target.value) }), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setMonth(shiftMonth(month, 1)), "aria-label": "Mes siguiente" }, "→")) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setYear(year - 1), "aria-label": "Año anterior" }, "←"), /* @__PURE__ */ React.createElement("span", { className: "axis-display", style: { fontSize: 22, fontWeight: 700 } }, year), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => setYear(year + 1), "aria-label": "Año siguiente" }, "→")), /* @__PURE__ */ React.createElement("span", { style: { marginLeft: 12, fontSize: 13, color: C_MUTED } }, "Ventas:"), /* @__PURE__ */ React.createElement(Seg, { value: estado, onChange: setEstado, options: [["fin", "Cobradas"], ["pen", "Pendientes"], ["todos", "Todas"]] }), /* @__PURE__ */ React.createElement("span", { style: { marginLeft: 12, fontSize: 13, color: C_MUTED } }, "Forma de pago:"), /* @__PURE__ */ React.createElement(Seg, { value: forma, onChange: setForma, options: [["todas", "Todas"], ["efectivo", "Efectivo"], ["tarjeta", "Tarjeta"], ["transferencia", "Transferencia"], ["domiciliado", "Domiciliado"]] })), forma !== "todas" && (!payments.some((p) => p.met) || estado !== "fin") && /* @__PURE__ */ React.createElement("p", { style: { margin: 0, fontSize: 12, color: C_WARN } }, !payments.some((p) => p.met) ? "Pulsa «Sincronizar ahora» para cargar la forma de pago de cada cobro." : "Los pagos pendientes aún no tienen forma de pago: con este filtro solo se cuentan los cobrados."), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, role: "tablist", "aria-label": "Persona" }, ["__equipo__", ...keys].map((k) => {
     const on = sel === k;
     const p = k === "__equipo__" ? { short: "Todo el equipo", color: C_INK } : P(k);
     return /* @__PURE__ */ React.createElement(
@@ -1256,6 +1257,7 @@ function AxisPanel() {
   const [payFilter, setPayFilter] = useState("fin");
   const [autoSyncUrl, setAutoSyncUrl] = useState("");
   const [autoSyncState, setAutoSyncState] = useState({ status: "idle", msg: "" });
+  const [syncedAtMs, setSyncedAtMs] = useState(null);
   const [syncKey, setSyncKey] = useState("");
   useEffect(() => {
     (async () => {
@@ -1297,24 +1299,40 @@ function AxisPanel() {
   useEffect(() => {
     if (loaded) saveKey("axis-sync-key", syncKey);
   }, [syncKey, loaded]);
-  async function handleAutoSync(silent, realStarted) {
-    if (!autoSyncUrl.trim()) return;
-    if (!silent) setAutoSyncState({ status: "sync", msg: "Descargando datos actualizados\u2026" });
+  // Lee los datos sincronizados. Plan A: la API de GitHub (siempre al día, pero
+  // limitada a 60 lecturas/hora por conexión). Plan B si falla o se agota: el
+  // fichero "raw" del mismo Gist, sin límite (puede ir unos minutos por detrás).
+  async function leerDatosSincronizados() {
+    const url = autoSyncUrl.trim();
+    const rawGuardada = await loadKey("axis-gist-raw", "");
     try {
-      const res = await fetch(`${autoSyncUrl.trim()}${autoSyncUrl.includes("?") ? "&" : "?"}_=${Date.now()}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const res = await fetch(`${url}${url.includes("?") ? "&" : "?"}_=${Date.now()}`);
+      if (!res.ok) throw new Error(res.status === 403 || res.status === 429 ? "GitHub ha limitado las lecturas desde esta conexi\xF3n" : `HTTP ${res.status}`);
       const raw = await res.json();
-      let json = raw;
       const gistFile = raw && raw.files && raw.files["axis-sessions.json"];
-      if (gistFile && gistFile.truncated && gistFile.raw_url) {
-        // La API de Gist corta el contenido a partir de ~1 MB: en ese caso
-        // descargamos el fichero completo desde raw_url.
+      if (!gistFile) return { json: raw, planB: false };
+      if (raw.owner && raw.owner.login && raw.id) saveKey("axis-gist-raw", `https://gist.githubusercontent.com/${raw.owner.login}/${raw.id}/raw/axis-sessions.json`);
+      // La API corta el contenido a partir de ~1 MB: entonces se baja entero.
+      if (gistFile.truncated && gistFile.raw_url) {
         const rawRes = await fetch(gistFile.raw_url);
         if (!rawRes.ok) throw new Error(`HTTP ${rawRes.status}`);
-        json = await rawRes.json();
-      } else if (gistFile && typeof gistFile.content === "string") {
-        json = JSON.parse(gistFile.content);
+        return { json: await rawRes.json(), planB: false };
       }
+      return { json: JSON.parse(gistFile.content), planB: false };
+    } catch (e) {
+      if (!rawGuardada) throw e;
+      const rawRes = await fetch(`${rawGuardada}?_=${Date.now()}`);
+      if (!rawRes.ok) throw e;
+      return { json: await rawRes.json(), planB: true };
+    }
+  }
+  // Devuelve true si los datos cargados son los de la sincronización recién lanzada.
+  async function handleAutoSync(silent, realStarted) {
+    if (!autoSyncUrl.trim()) return false;
+    if (!silent) setAutoSyncState({ status: "sync", msg: "Descargando datos actualizados\u2026" });
+    try {
+      const { json, planB } = await leerDatosSincronizados();
+      if (!json || typeof json !== "object" || !json.days || typeof json.days !== "object") throw new Error("los datos no tienen el formato esperado");
       const daysObj = json.days || {};
       let allRecords = [];
       for (const [d, records] of Object.entries(daysObj)) {
@@ -1363,10 +1381,18 @@ function AxisPanel() {
       if (enTiempoReal) msg = `En tiempo real: datos tra\xEDdos de AimHarder a las ${hora(syncedAt)} \xB7 ${cuenta}.`;
       else if (syncedAt) msg = `Datos de AimHarder del ${hora(syncedAt)} (hace ${Math.max(0, Math.round((Date.now() - syncedAt.getTime()) / 6e4))} min) \xB7 ${cuenta}.`;
       else msg = `Datos de una sincronizaci\xF3n anterior (hora desconocida: los subi\xF3 una versi\xF3n antigua del script) \xB7 ${cuenta}.`;
-      if (realStarted && !enTiempoReal) msg += " Ojo: el servidor termin\xF3 pero estos no son los datos que acaba de traer; vuelve a pulsar \xABSincronizar ahora\xBB en un minuto.";
+      if (realStarted && !enTiempoReal) msg += " Ojo: el servidor termin\xF3 pero GitHub a\xFAn no muestra los datos nuevos; vuelve a pulsar \xABSincronizar ahora\xBB en un minuto.";
+      const horas = syncedAt ? (Date.now() - syncedAt.getTime()) / 36e5 : 0;
+      if (!realStarted && horas >= 24) msg += ` \u26A0\uFE0F Son de hace ${Math.floor(horas / 24)} d\xEDa(s): pulsa \xABSincronizar ahora\xBB antes de usar las cifras.`;
+      if (json.payments_stale) msg += " \u26A0\uFE0F Los pagos no se pudieron actualizar en esa sincronizaci\xF3n: son los de la anterior.";
+      if (planB) msg += " (Le\xEDdo por la v\xEDa de reserva de GitHub: puede ir unos minutos por detr\xE1s.)";
+      setSyncedAtMs(syncedAt ? syncedAt.getTime() : null);
       setAutoSyncState({ status: enTiempoReal || !realStarted ? "done" : "error", msg });
+      return !!enTiempoReal;
     } catch (e) {
-      setAutoSyncState({ status: "error", msg: `No se pudo leer la URL de sincronizaci\xF3n (${e.message}). Comprueba que la has pegado bien.` });
+      // Si falla la lectura NO se toca nada: el panel sigue con lo último que tenía guardado.
+      setAutoSyncState({ status: "error", msg: `No se han podido leer los datos sincronizados (${e.message}). El panel sigue mostrando los \xFAltimos que ten\xEDa guardados. Comprueba la conexi\xF3n y la URL.` });
+      return false;
     }
   }
   // Sincronización real: pide al servidor de sincronización (Render, ver
@@ -1387,8 +1413,20 @@ function AxisPanel() {
     const timer = setInterval(tick, 1e3);
     let res, data;
     try {
-      // El plan gratuito se duerme tras 15 min sin uso: esto lo despierta.
-      await fetch(`${SYNC_SERVER_URL}/status`);
+      // El plan gratuito se duerme tras 15 min sin uso y tarda ~1 min en
+      // despertar (mientras, responde con error): se insiste hasta 2 minutos.
+      for (let despierto = false; !despierto; ) {
+        try {
+          despierto = (await fetch(`${SYNC_SERVER_URL}/status`)).ok;
+        } catch (e) {
+          despierto = false;
+        }
+        if (!despierto) {
+          if (Date.now() - started > 12e4) throw new Error("el servidor no despierta");
+          fase = "Despertando el servidor de sincronizaci\xF3n";
+          await new Promise((r) => setTimeout(r, 5e3));
+        }
+      }
       fase = "Descargando datos de AimHarder (suele tardar 1-2 min)";
       res = await fetch(`${SYNC_SERVER_URL}/sync`, { method: "POST", headers: { "X-Axis-Key": syncKey.trim() } });
       data = await res.json().catch(() => ({}));
@@ -1402,10 +1440,14 @@ function AxisPanel() {
       return;
     }
     if (!res.ok || !data.ok) {
-      setAutoSyncState({ status: "error", msg: `La sincronizaci\xF3n con AimHarder ha fallado: ${data.error || `HTTP ${res.status}`}.` });
+      setAutoSyncState({ status: "error", msg: `La sincronizaci\xF3n con AimHarder ha fallado y no se ha cambiado nada: ${String(data.error || `HTTP ${res.status}`).replace(/^ERROR:\s*/, "")}` });
       return;
     }
-    return handleAutoSync(false, started);
+    // GitHub puede tardar unos segundos en enseñar lo recién subido: se reintenta.
+    for (let i = 0; i < 5; i++) {
+      if (await handleAutoSync(false, started)) return;
+      await new Promise((r) => setTimeout(r, 6e3));
+    }
   }
   useEffect(() => {
     if (loaded && autoSyncUrl.trim()) handleAutoSync(true);
@@ -1585,7 +1627,7 @@ function AxisPanel() {
     var _a;
     return ((_a = coachOf(s)) == null ? void 0 : _a.name) || s.coachRaw || "\xBFCoach?";
   };
-  return /* @__PURE__ */ React.createElement("div", { className: "axis-root" }, /* @__PURE__ */ React.createElement("style", null, css), /* @__PURE__ */ React.createElement("header", { style: { background: "#12211B", color: "#fff", padding: "18px 22px 0" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("h1", { className: "axis-display", style: { margin: 0, fontSize: 30, fontWeight: 700, textTransform: "uppercase" } }, "Axis \xB7 Panel de salas"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#9DB4A9" } }, "Horarios por sala \xB7 exporta a Google Calendar / Outlook")), /* @__PURE__ */ React.createElement("nav", { style: { marginTop: 10, display: "flex", overflowX: "auto", WebkitOverflowScrolling: "touch" } }, [["horario", "Horario"], ["sesiones", "Sincronizaci\xF3n"], ["stats", "Resumen mensual"], ["objetivos", "Objetivos"], ["personas", "Por persona"], ["equipo", "Equipo y salas"]].map(([id, label]) => /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement("div", { className: "axis-root" }, /* @__PURE__ */ React.createElement("style", null, css), (autoSyncState.status === "error" || syncedAtMs && Date.now() - syncedAtMs > 864e5) && tab !== "sesiones" && /* @__PURE__ */ React.createElement("div", { role: "status", style: { background: "#FEF3E7", color: "#7A4A0B", padding: "8px 22px", fontSize: 13, fontWeight: 600, cursor: "pointer" }, onClick: () => setTab("sesiones") }, autoSyncState.status === "error" ? "\u26A0\uFE0F Hay un problema con la sincronizaci\xF3n de AimHarder: las cifras pueden no estar al d\xEDa. Pulsa aqu\xED para verlo." : `\u26A0\uFE0F Los datos de AimHarder son de hace ${Math.floor((Date.now() - syncedAtMs) / 864e5)} d\xEDa(s). Pulsa aqu\xED y dale a \xABSincronizar ahora\xBB.`), /* @__PURE__ */ React.createElement("header", { style: { background: "#12211B", color: "#fff", padding: "18px 22px 0" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("h1", { className: "axis-display", style: { margin: 0, fontSize: 30, fontWeight: 700, textTransform: "uppercase" } }, "Axis \xB7 Panel de salas"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#9DB4A9" } }, "Horarios por sala \xB7 exporta a Google Calendar / Outlook")), /* @__PURE__ */ React.createElement("nav", { style: { marginTop: 10, display: "flex", overflowX: "auto", WebkitOverflowScrolling: "touch" } }, [["horario", "Horario"], ["sesiones", "Sincronizaci\xF3n"], ["stats", "Resumen mensual"], ["objetivos", "Objetivos"], ["personas", "Por persona"], ["equipo", "Equipo y salas"]].map(([id, label]) => /* @__PURE__ */ React.createElement(
     "button",
     {
       key: id,
