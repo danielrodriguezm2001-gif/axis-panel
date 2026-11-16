@@ -791,7 +791,10 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
     });
     credits.set(key, list);
   }
-  for (const l of credits.values()) l.sort((a, b) => a.e.localeCompare(b.e) || String(a.id).localeCompare(String(b.id), void 0, { numeric: true }));
+  for (const l of credits.values()) {
+    l.sort((a, b) => a.e.localeCompare(b.e) || String(a.id).localeCompare(String(b.id), void 0, { numeric: true }));
+    for (const c of l) c.total = c.left;
+  }
   const names = [...credits.keys()];
   const resolve = (raw) => {
     const k = normName(raw);
@@ -855,6 +858,7 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
       if (cr) {
         cr.left -= 1;
         if (cr.agrupado) cr.n += 1;
+        if (!cr.ultimo || s.date > cr.ultimo) cr.ultimo = s.date;
         rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", cobro: cr.st === "fin" ? cr.d : null, sinBono: false, agrupado: cr.agrupado ? cr : null });
       } else {
         rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: 0, origen: "Sin bono", seller: null, sinBono: true });
@@ -868,6 +872,8 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
     r.origen = `Pago agrupado (${Math.round(g.amt)} € ÷ ${g.n} ${g.n === 1 ? "sesión" : "sesiones"})`;
     delete r.agrupado;
   }
+  // Estado final de cada bono (sesiones que quedan), para «Bonos por renovar».
+  rows.creditos = [...credits.values()].flat();
   return rows;
 }
 function valorPorPersona(rows, prefix) {
@@ -1236,6 +1242,155 @@ function PersonasTab({ payments, sessions, coaches, nowMin }) {
       return /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { style: { ...tdS, textAlign: "left" } }, "Total sin Axis Club"), /* @__PURE__ */ React.createElement("td", { style: tdS }, sinClub.min ? horas(sinClub.min) : "–"), /* @__PURE__ */ React.createElement("td", { style: tdS }, sinClub.n || "–"), /* @__PURE__ */ React.createElement("td", { style: tdS }, sinClub.asist || "–"), /* @__PURE__ */ React.createElement("td", { style: tdS }), /* @__PURE__ */ React.createElement("td", { style: { ...tdS, color: C_MUTED } }, sinClub.prog || "–"));
     })(), /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { style: { ...td, textAlign: "left", fontWeight: 700 } }, "Total"), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700 } }, s.min ? horas(s.min) : "–"), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700 } }, s.nSes), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700 } }, s.asist || "–"), /* @__PURE__ */ React.createElement("td", { style: td }), /* @__PURE__ */ React.createElement("td", { style: { ...td, fontWeight: 700, color: C_MUTED } }, s.nProg || "–")))))));
   })(), sel !== "__equipo__" && PAGO_COACH[sel] && /* @__PURE__ */ React.createElement(PagoCoach, { k: sel, p: P(sel), ledger: ledgerPago, sessions, coaches, periodo, month, year, etiquetaPeriodo, hoy, nowMin }), sel !== "__equipo__" && /* @__PURE__ */ React.createElement(ValorPersona, { v: valor[sel], p: P(sel), P, etiquetaPeriodo, rows: ledger.filter((r) => (r.date || "").startsWith(prefix)), k: sel }), /* @__PURE__ */ React.createElement("p", { style: { margin: 0, fontSize: 12, color: C_MUTED } }, "Ventas: se atribuyen a quien registró el cobro en AimHarder («Creado por»); lo creado por la cuenta del centro o el administrador va a Axis. Sesiones: se atribuyen al coach de la sesión en el calendario. «2 a 1» = 2 clientes con un mismo profesional."));
+}
+
+// ===== Pestaña «Gestión»: lo que necesita quien lleva el centro =====
+// 1) qué pagar a cada entrenador, 2) quién debe dinero, 3) qué corregir en
+// AimHarder y 4) qué bonos toca renovar. Todo sale de los mismos cálculos
+// que «Por persona» (buildSessionLedger / pagoCoach).
+function GestionTab({ payments, sessions, coaches, nowMin }) {
+  const h = React.createElement;
+  const hoy = todayISO();
+  const [month, setMonth] = useState(hoy.slice(0, 7));
+  const [copiado, setCopiado] = useState("");
+  const people = useMemo(() => buildPeople(coaches), [coaches]);
+  const P = (k) => people.get(k) || { name: CREATOR_LABELS[k] || k, short: CREATOR_LABELS[k] || k, color: "#6B7280" };
+  const ledger = useMemo(() => buildSessionLedger(payments, sessions, coaches, hoy, nowMin), [payments, sessions, coaches, nowMin]);
+  const eur2 = (v) => (v || 0).toLocaleString("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtD = (d) => d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(2, 4)}` : "–";
+  const dias = (d) => Math.max(0, Math.round((Date.parse(hoy) - Date.parse(d)) / 864e5));
+  const etiqueta = monthLabel(month);
+  const nombreMes = etiqueta.split(" ")[0].toLowerCase();
+  const tdL = { ...td, textAlign: "left" };
+  const tdT = { ...td, fontWeight: 800, borderTop: `2px solid ${C_INK}` };
+  const nota = { margin: "0 0 10px", fontSize: 12, color: C_MUTED };
+  const copiar = (clave, texto) => {
+    const ok = () => {
+      setCopiado(clave);
+      setTimeout(() => setCopiado(""), 2500);
+    };
+    const plan2 = () => {
+      const ta = document.createElement("textarea");
+      ta.value = texto;
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+        ok();
+      } catch (e) {
+      }
+      ta.remove();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(texto).then(ok, plan2);
+    else plan2();
+  };
+  const botonCopiar = (clave, texto) => h("button", { className: "axis-btn ghost", onClick: () => copiar(clave, texto) }, copiado === clave ? "✓ Copiado" : "Copiar para WhatsApp");
+
+  // ---------- 1) Pagos a entrenadores del mes
+  const pagos = sortPeople(Object.keys(PAGO_COACH)).map((k) => {
+    const r = pagoCoach(k, ledger, sessions, coaches, month, hoy, nowMin);
+    return { k, r, pend: r.pendientes.reduce((a, x) => a + x.pago, 0) };
+  }).filter((x) => x.r.total > 0 || x.r.pendientes.length || x.r.sinBono.length);
+  const totalPagar = pagos.reduce((a, x) => a + x.r.total, 0);
+  const totalPend = pagos.reduce((a, x) => a + x.pend, 0);
+  const textoPagos = [
+    `*Pagos a entrenadores · ${etiqueta}*`,
+    "",
+    ...pagos.flatMap((x) => [
+      `*${P(x.k).short}: ${eur2(x.r.total)}*`,
+      `• Sesiones de ${nombreMes} ya cobradas: ${eur2(x.r.totalMes)}`,
+      ...(x.r.totalAtras ? [`• De meses anteriores cobradas en ${nombreMes}: ${eur2(x.r.totalAtras)}`] : []),
+      ...(x.r.pendientes.length ? [`• Pendiente de cobro (aún no se paga): ${x.r.pendientes.length} sesiones · ${eur2(x.pend)}`] : []),
+      ""
+    ]),
+    `*Total a pagar: ${eur2(totalPagar)}*`,
+    "_Importes sin IVA. Una sesión se paga cuando el cliente la ha pagado y el entrenador la ha dado._"
+  ].join("\n");
+
+  // ---------- 2) Deuda por cliente (pagos pendientes ya vencidos)
+  const vencidos = payments.filter((p) => p.st === "pen" && p.amt > 0 && (p.d || "") <= hoy);
+  const porCliente = /* @__PURE__ */ new Map();
+  for (const p of vencidos) {
+    const c = porCliente.get(p.cl) || porCliente.set(p.cl, { cl: p.cl, n: 0, total: 0, desde: p.d, quien: /* @__PURE__ */ new Set(), conceptos: [] }).get(p.cl);
+    c.n += 1;
+    c.total += p.amt;
+    if (p.d < c.desde) c.desde = p.d;
+    c.quien.add(P(personKeyOfPayment(p)).short);
+    c.conceptos.push(`${fmtD(p.d)} · ${p.co} · ${eur2(p.amt)}`);
+  }
+  const deuda = [...porCliente.values()].sort((a, b) => b.total - a.total);
+  const totalDeuda = deuda.reduce((a, c) => a + c.total, 0);
+  const textoDeuda = [`*Pagos pendientes de cobro · ${fmtD(hoy)}*`, "", ...deuda.map((c) => `• ${c.cl}: ${eur2(c.total)} (${c.n} ${c.n === 1 ? "pago" : "pagos"}, desde el ${fmtD(c.desde)})`), "", `*Total: ${eur2(totalDeuda)}*`].join("\n");
+
+  // ---------- 3) Incidencias a corregir en AimHarder
+  const delMes = ledger.filter((r) => (r.date || "").startsWith(month));
+  const fila = (r) => `${fmtD(r.date)} ${r.start || ""} · ${r.client} · ${r.tipo} · ${P(r.coach).short}`;
+  const pago = (p) => `${fmtD(p.d)} · ${p.cl} · ${p.co} · ${eur2(p.amt)} · ${P(personKeyOfPayment(p)).short}`;
+  const incidencias = [
+    { t: "Sesiones sin ningún pago que las cubra", como: "Falta registrar el cobro en AimHarder, o el concepto del pago no dice de qué es. Mientras tanto no se le paga al entrenador.", items: delMes.filter((r) => r.sinBono && r.client !== "(sin cliente)").map(fila), mes: true },
+    { t: "Sesiones 1 a 1 sin cliente apuntado", como: "Apunta al cliente en la sesión o bórrala si no se dio.", items: delMes.filter((r) => r.client === "(sin cliente)").map(fila), mes: true },
+    { t: "Fisioterapia impartida por alguien que no es fisio", como: "Si la dio el fisio, cambia el entrenador en AimHarder; si no, se le paga a quien figura.", items: delMes.filter((r) => r.tipo === "Fisioterapia" && !["erik", "marti"].includes(r.coach)).map(fila), mes: true },
+    { t: "Sesiones sin entrenador reconocido", como: "Asigna el entrenador en AimHarder: ahora nadie cobra esa sesión.", items: delMes.filter((r) => r.coach === "__none__").map(fila), mes: true },
+    { t: "Conceptos de venta que el panel no reconoce", como: "No se usan para cubrir sesiones. Si incluyen sesiones, dilo en el concepto (p. ej. «Bono 4 sesiones»).", items: payments.filter((p) => (p.d || "").startsWith(month) && p.amt > 0 && productOf(p.co, p.cat).familia === "Otros").map(pago), mes: true },
+    { t: "Pagos pendientes desde hace más de 30 días", como: "Reclama el cobro o anúlalo si ya no procede.", items: vencidos.filter((p) => dias(p.d) > 30).sort((a, b) => a.d.localeCompare(b.d)).map((p) => `${pago(p)} · hace ${dias(p.d)} días`) },
+    { t: "Pagos pendientes de 0 €", como: "No suman dinero, pero dejan sus sesiones como pendientes de cobro. Márcalos como cobrados o bórralos.", items: payments.filter((p) => p.st === "pen" && !(p.amt > 0)).map(pago) },
+    { t: "Pagos agrupados (varias sesiones en un solo pago)", como: "AimHarder corta el concepto y se pierde el precio de cada sesión: el panel reparte el importe a partes iguales. Mejor no agrupar.", items: payments.filter((p) => / \+ /.test(p.co || "") && !stripAccents(p.co || "").includes("iniciacion")).map(pago) }
+  ].filter((x) => x.items.length);
+  const nIncidencias = incidencias.reduce((a, x) => a + x.items.length, 0);
+
+  // ---------- 4) Bonos que toca renovar
+  const byId = new Map(payments.map((p) => [String(p.id), p]));
+  const grupos = /* @__PURE__ */ new Map();
+  for (const c of ledger.creditos || []) {
+    if (c.agrupado || !isFinite(c.total)) continue;
+    const p = byId.get(String(c.id));
+    if (!p) continue;
+    const key = normName(p.cl) + "|" + c.fam;
+    const g = grupos.get(key) || grupos.set(key, { cl: p.cl, fam: c.fam, left: 0, multi: false, ultimo: "", origen: "", st: "" }).get(key);
+    g.left += c.left;
+    if (c.total > 1) {
+      g.multi = true;
+      g.origen = c.origen;
+      g.st = c.st;
+    }
+    if (c.ultimo && c.ultimo > g.ultimo) g.ultimo = c.ultimo;
+  }
+  const renovar = [...grupos.values()].filter((g) => g.multi && g.left <= 1 && g.ultimo && dias(g.ultimo) <= 45).sort((a, b) => a.left - b.left || b.ultimo.localeCompare(a.ultimo));
+
+  const seccion = (titulo, extra, ...hijos) => h("section", { style: { ...card, overflowX: "auto" } }, h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" } }, h("h2", { className: "axis-display", style: h2s }, titulo), extra), ...hijos);
+  return h("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18 } },
+    h("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 14 } },
+      h("button", { className: "axis-btn ghost", onClick: () => setMonth(shiftMonth(month, -1)), "aria-label": "Mes anterior" }, "←"),
+      h("input", { type: "month", className: "axis-input", style: { width: 160 }, value: month, onChange: (e) => e.target.value && setMonth(e.target.value) }),
+      h("button", { className: "axis-btn ghost", onClick: () => setMonth(shiftMonth(month, 1)), "aria-label": "Mes siguiente" }, "→"),
+      h("span", { style: { fontSize: 13, color: C_MUTED } }, "El mes afecta a los pagos a entrenadores y a las incidencias de sesiones. La deuda y los bonos por renovar son a día de hoy.")),
+
+    seccion(`Pagos a entrenadores · ${etiqueta}`, pagos.length > 0 && botonCopiar("pagos", textoPagos),
+      h("p", { style: nota }, "Sin IVA. Se paga cada sesión el mes en que se cobra su bono. El detalle sesión a sesión está en «Por persona»."),
+      pagos.length === 0 ? h("p", { style: { fontSize: 13, color: C_MUTED, margin: 0 } }, "Nada que pagar en ", etiqueta, ".") : h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 640 } },
+        h("thead", null, h("tr", null, h("th", { style: { ...th, textAlign: "left" } }, "Entrenador"), h("th", { style: th }, `Sesiones de ${nombreMes}`), h("th", { style: th }, "De meses anteriores"), h("th", { style: th }, "A pagar"), h("th", { style: th }, "Pendiente de cobro"), h("th", { style: th }, "Sin pago"))),
+        h("tbody", null,
+          pagos.map((x) => h("tr", { key: x.k }, h("td", { style: { ...tdL, fontWeight: 700 } }, h("span", { style: { display: "inline-flex", alignItems: "center", gap: 6 } }, h(Swatch, { color: P(x.k).color }), P(x.k).name)), h("td", { style: td }, eur2(x.r.totalMes)), h("td", { style: td }, x.r.totalAtras ? eur2(x.r.totalAtras) : "–"), h("td", { style: { ...td, fontWeight: 800 } }, eur2(x.r.total)), h("td", { style: { ...td, color: C_MUTED } }, x.r.pendientes.length ? `${x.r.pendientes.length} · ${eur2(x.pend)}` : "–"), h("td", { style: { ...td, color: x.r.sinBono.length ? C_WARN : void 0, fontWeight: x.r.sinBono.length ? 700 : 400 } }, x.r.sinBono.length || "–"))),
+          h("tr", null, h("td", { style: { ...tdT, textAlign: "left" } }, "Total"), h("td", { style: tdT }, eur2(pagos.reduce((a, x) => a + x.r.totalMes, 0))), h("td", { style: tdT }, eur2(pagos.reduce((a, x) => a + x.r.totalAtras, 0))), h("td", { style: tdT }, eur2(totalPagar)), h("td", { style: { ...tdT, color: C_MUTED } }, eur2(totalPend)), h("td", { style: tdT }, pagos.reduce((a, x) => a + x.r.sinBono.length, 0) || "–"))))),
+
+    seccion(`Clientes con pagos pendientes · ${eur2(totalDeuda)}`, deuda.length > 0 && botonCopiar("deuda", textoDeuda),
+      h("p", { style: nota }, "Pagos que AimHarder tiene como pendientes y ya han vencido, de cualquier mes. En rojo, los de más de 30 días. Pulsa un cliente para ver sus pagos."),
+      deuda.length === 0 ? h("p", { style: { fontSize: 13, color: C_MUTED, margin: 0 } }, "Nadie debe nada. 🎉") : h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 640 } },
+        h("thead", null, h("tr", null, h("th", { style: { ...th, textAlign: "left" } }, "Cliente"), h("th", { style: th }, "Pagos"), h("th", { style: th }, "Importe"), h("th", { style: th }, "Desde"), h("th", { style: th }, "Días"), h("th", { style: { ...th, textAlign: "left" } }, "Registrado por"))),
+        h("tbody", null, deuda.map((c) => h("tr", { key: c.cl }, h("td", { style: tdL }, h("details", null, h("summary", { style: { cursor: "pointer", fontWeight: 600 } }, c.cl), h("ul", { style: { margin: "4px 0", paddingLeft: 18, fontSize: 12, color: C_MUTED, whiteSpace: "normal" } }, c.conceptos.map((t, i) => h("li", { key: i }, t))))), h("td", { style: { ...td, verticalAlign: "top" } }, c.n), h("td", { style: { ...td, fontWeight: 700, verticalAlign: "top" } }, eur2(c.total)), h("td", { style: { ...td, verticalAlign: "top" } }, fmtD(c.desde)), h("td", { style: { ...td, verticalAlign: "top", color: dias(c.desde) > 30 ? C_BAD : void 0, fontWeight: dias(c.desde) > 30 ? 700 : 400 } }, dias(c.desde)), h("td", { style: { ...tdL, verticalAlign: "top" } }, [...c.quien].join(", "))))))),
+
+    seccion(`Para corregir en AimHarder · ${nIncidencias}`, null,
+      h("p", { style: nota }, "Cosas que hacen que las cifras salgan raras. Se arreglan en AimHarder; después pulsa «Sincronizar ahora»."),
+      incidencias.length === 0 ? h("p", { style: { fontSize: 13, color: C_MUTED, margin: 0 } }, "Todo en orden. ✅") : incidencias.map((x) => h("details", { key: x.t, style: { borderTop: `1px solid ${C_SOFT}`, padding: "8px 0" } },
+        h("summary", { style: { cursor: "pointer", fontSize: 13, fontWeight: 700 } }, h("span", { style: { display: "inline-block", minWidth: 28, color: C_WARN } }, x.items.length), x.t, x.mes ? ` · ${nombreMes}` : ""),
+        h("p", { style: { margin: "6px 0 4px 28px", fontSize: 12, color: C_MUTED } }, x.como),
+        h("ul", { style: { margin: "0 0 0 28px", paddingLeft: 18, fontSize: 12, lineHeight: 1.6 } }, x.items.map((t, i) => h("li", { key: i }, t)))))),
+
+    seccion(`Bonos por renovar · ${renovar.length}`, null,
+      h("p", { style: nota }, "Clientes activos (con sesión en los últimos 45 días) a los que les queda una sesión o ninguna de su bono. Buen momento para ofrecerles el siguiente."),
+      renovar.length === 0 ? h("p", { style: { fontSize: 13, color: C_MUTED, margin: 0 } }, "Ningún bono a punto de acabarse.") : h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 560 } },
+        h("thead", null, h("tr", null, h("th", { style: { ...th, textAlign: "left" } }, "Cliente"), h("th", { style: { ...th, textAlign: "left" } }, "Tipo"), h("th", { style: th }, "Le quedan"), h("th", { style: th }, "Última sesión"), h("th", { style: { ...th, textAlign: "left" } }, "Último bono"))),
+        h("tbody", null, renovar.map((g) => h("tr", { key: g.cl + g.fam }, h("td", { style: { ...tdL, fontWeight: 600 } }, g.cl), h("td", { style: tdL }, g.fam), h("td", { style: { ...td, fontWeight: 700, color: g.left === 0 ? C_WARN : void 0 } }, g.left), h("td", { style: td }, fmtD(g.ultimo)), h("td", { style: { ...tdL, color: C_MUTED } }, g.origen, g.st === "pen" ? " · pendiente de cobro" : "")))))));
 }
 
 function AxisPanel() {
@@ -1627,7 +1782,7 @@ function AxisPanel() {
     var _a;
     return ((_a = coachOf(s)) == null ? void 0 : _a.name) || s.coachRaw || "\xBFCoach?";
   };
-  return /* @__PURE__ */ React.createElement("div", { className: "axis-root" }, /* @__PURE__ */ React.createElement("style", null, css), (autoSyncState.status === "error" || syncedAtMs && Date.now() - syncedAtMs > 864e5) && tab !== "sesiones" && /* @__PURE__ */ React.createElement("div", { role: "status", style: { background: "#FEF3E7", color: "#7A4A0B", padding: "8px 22px", fontSize: 13, fontWeight: 600, cursor: "pointer" }, onClick: () => setTab("sesiones") }, autoSyncState.status === "error" ? "\u26A0\uFE0F Hay un problema con la sincronizaci\xF3n de AimHarder: las cifras pueden no estar al d\xEDa. Pulsa aqu\xED para verlo." : `\u26A0\uFE0F Los datos de AimHarder son de hace ${Math.floor((Date.now() - syncedAtMs) / 864e5)} d\xEDa(s). Pulsa aqu\xED y dale a \xABSincronizar ahora\xBB.`), /* @__PURE__ */ React.createElement("header", { style: { background: "#12211B", color: "#fff", padding: "18px 22px 0" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("h1", { className: "axis-display", style: { margin: 0, fontSize: 30, fontWeight: 700, textTransform: "uppercase" } }, "Axis \xB7 Panel de salas"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#9DB4A9" } }, "Horarios por sala \xB7 exporta a Google Calendar / Outlook")), /* @__PURE__ */ React.createElement("nav", { style: { marginTop: 10, display: "flex", overflowX: "auto", WebkitOverflowScrolling: "touch" } }, [["horario", "Horario"], ["sesiones", "Sincronizaci\xF3n"], ["stats", "Resumen mensual"], ["objetivos", "Objetivos"], ["personas", "Por persona"], ["equipo", "Equipo y salas"]].map(([id, label]) => /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement("div", { className: "axis-root" }, /* @__PURE__ */ React.createElement("style", null, css), (autoSyncState.status === "error" || syncedAtMs && Date.now() - syncedAtMs > 864e5) && tab !== "sesiones" && /* @__PURE__ */ React.createElement("div", { role: "status", style: { background: "#FEF3E7", color: "#7A4A0B", padding: "8px 22px", fontSize: 13, fontWeight: 600, cursor: "pointer" }, onClick: () => setTab("sesiones") }, autoSyncState.status === "error" ? "\u26A0\uFE0F Hay un problema con la sincronizaci\xF3n de AimHarder: las cifras pueden no estar al d\xEDa. Pulsa aqu\xED para verlo." : `\u26A0\uFE0F Los datos de AimHarder son de hace ${Math.floor((Date.now() - syncedAtMs) / 864e5)} d\xEDa(s). Pulsa aqu\xED y dale a \xABSincronizar ahora\xBB.`), /* @__PURE__ */ React.createElement("header", { style: { background: "#12211B", color: "#fff", padding: "18px 22px 0" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("h1", { className: "axis-display", style: { margin: 0, fontSize: 30, fontWeight: 700, textTransform: "uppercase" } }, "Axis \xB7 Panel de salas"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#9DB4A9" } }, "Horarios por sala \xB7 exporta a Google Calendar / Outlook")), /* @__PURE__ */ React.createElement("nav", { style: { marginTop: 10, display: "flex", overflowX: "auto", WebkitOverflowScrolling: "touch" } }, [["horario", "Horario"], ["sesiones", "Sincronizaci\xF3n"], ["stats", "Resumen mensual"], ["objetivos", "Objetivos"], ["personas", "Por persona"], ["gestion", "Gesti\xF3n"], ["equipo", "Equipo y salas"]].map(([id, label]) => /* @__PURE__ */ React.createElement(
     "button",
     {
       key: id,
@@ -1722,7 +1877,7 @@ function AxisPanel() {
       var _a, _b;
       return /* @__PURE__ */ React.createElement("td", { key: c, style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, textAlign: "right", fontWeight: 700 } }, eur(((_a = payStats.totals[c]) == null ? void 0 : _a.amt) || 0), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#5A6B63" } }, "(", ((_b = payStats.totals[c]) == null ? void 0 : _b.n) || 0, ")"));
     }), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, textAlign: "right", fontWeight: 800 } }, eur(payStats.grand), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#5A6B63" } }, "(", payStats.n, ")"))))), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: "#5A6B63", marginBottom: 0 } }, '"Creado por" indica qui\xE9n registr\xF3 el cobro, no necesariamente qui\xE9n dio la sesi\xF3n. La columna "Axis" re\xFAne los pagos creados con la cuenta del centro (Axis Health & Performance) o por el administrador: son ingresos del centro y no se suman a Marc, igual que en el Excel del plan financiero.')));
-  })(), tab === "objetivos" && /* @__PURE__ */ React.createElement(ObjetivosTab, { payments, coaches }), tab === "personas" && /* @__PURE__ */ React.createElement(PersonasTab, { payments, sessions, coaches, nowMin }), tab === "equipo" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18, maxWidth: 760 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Equipo"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 12px", fontSize: 13, color: "#5A6B63" } }, "El email es el que se a\xF1adir\xE1 como invitado dentro del archivo .ics. Sin email, el evento se genera igualmente pero sin invitado."), coaches.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: c.id, style: { display: "grid", gridTemplateColumns: "36px 110px 150px 1fr auto", gap: 8, alignItems: "center", marginBottom: 8 } }, /* @__PURE__ */ React.createElement(
+  })(), tab === "objetivos" && /* @__PURE__ */ React.createElement(ObjetivosTab, { payments, coaches }), tab === "personas" && /* @__PURE__ */ React.createElement(PersonasTab, { payments, sessions, coaches, nowMin }), tab === "gestion" && /* @__PURE__ */ React.createElement(GestionTab, { payments, sessions, coaches, nowMin }), tab === "equipo" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18, maxWidth: 760 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Equipo"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 12px", fontSize: 13, color: "#5A6B63" } }, "El email es el que se a\xF1adir\xE1 como invitado dentro del archivo .ics. Sin email, el evento se genera igualmente pero sin invitado."), coaches.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: c.id, style: { display: "grid", gridTemplateColumns: "36px 110px 150px 1fr auto", gap: 8, alignItems: "center", marginBottom: 8 } }, /* @__PURE__ */ React.createElement(
     "input",
     {
       type: "color",
