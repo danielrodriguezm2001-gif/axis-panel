@@ -712,19 +712,22 @@ function creditFamily(pr) {
   if (pr.nombre === "Performance Group" || pr.nombre.startsWith("Grupo reducido")) return "Performance Group";
   if (pr.familia === "Valoración") return "Valoración inicial";
   if (pr.familia === "Nutrición") return "Nutrición";
+  // Sesión online: en el calendario se apunta como entrenamiento personal.
+  if (pr.familia === "Online") return "Online";
   return null;
 }
 const PRECIO_ASS_INICIACION = 100;
 const PRECIO_SESION_PG = 45;
 const PREFS_CREDITO = {
   "Fisioterapia": [(c) => c.fam === "Fisioterapia", (c) => c.generic],
-  "Entrenamiento personal": [(c) => c.fam === "Entrenamiento personal"],
+  "Entrenamiento personal": [(c) => c.fam === "Entrenamiento personal", (c) => c.fam === "Online"],
   "Performance Group": [(c) => c.fam === "Performance Group"],
   "Valoración inicial": [(c) => c.fam === "Valoración inicial"],
   "Nutrición": [(c) => c.fam === "Nutrición"]
 };
 function origenLabel(pr, fam) {
   if (fam === "Nutrición") return pr.nombre;
+  if (fam === "Online") return "Sesión online";
   if (fam === "Performance Group" || fam === "Valoración inicial") return pr.sesiones === 1 ? fam : `${fam} · ${String(pr.sesiones).replace(".", ",")} sesiones`;
   const n = pr.sesiones;
   const base = n === 1 ? "Sesión suelta" : `Bono ${String(n).replace(".", ",")} sesiones`;
