@@ -115,6 +115,100 @@ const dmyToISO = (s) => {
   const m = (s || "").match(/(\d{2})\/(\d{2})\/(\d{4})/);
   return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
 };
+// Pago externo (ajeno a AimHarder, guardado por el servidor en el Gist) -> formato del panel.
+function externoAPanel(e) {
+  const d = String(e.date || "").slice(0, 10);
+  return { id: "ext-" + e.id, cl: e.name || "", cat: catFromConcept(e.concept || ""), amt: Number(e.amount) || 0, c: creatorId(e.creator || "Axis"), cr: e.creator || "Axis", co: e.concept || "", d, st: e.status === "pending" ? "pen" : "fin", met: e.status === "pending" ? "" : e.method || "transferencia", em: d, ext: true, nt: e.notes || "" };
+}
+const EXT_CREADORES = ["Axis", "Marc", "Erik", "Daniel", "Sergio", "Mart\xED", "Marina"];
+const EXT_FORMAS = [["transferencia", "Transferencia"], ["efectivo", "Efectivo"], ["tarjeta", "Tarjeta"], ["bizum", "Bizum"], ["otro", "Otro"]];
+// Alta, cobro y baja de pagos externos (ajenos a AimHarder). Se guardan en el
+// servidor de sincronización (Gist) y cada sincronización los suma a los de AimHarder.
+function PagosExternosCard({ payments, setPayments, syncKey, serverUrl, month }) {
+  const h = React.createElement;
+  const vacio = { date: todayISO(), name: "", concept: "", amount: "", status: "paid", method: "transferencia", creator: "Axis", notes: "" };
+  const [f, setF] = useState(vacio);
+  const [msg, setMsg] = useState({ ok: true, t: "" });
+  const [busy, setBusy] = useState(false);
+  const externos = useMemo(() => payments.filter((p) => p.ext), [payments]);
+  const delMes = externos.filter((p) => (p.d || "").startsWith(month)).sort((a, b) => (b.d || "").localeCompare(a.d || ""));
+  const cobrado = delMes.filter((p) => p.st === "fin").reduce((a, p) => a + p.amt, 0);
+  const pendiente = delMes.filter((p) => p.st === "pen").reduce((a, p) => a + p.amt, 0);
+  async function llamar(method, path, body) {
+    if (!syncKey.trim()) throw new Error("introduce la clave de sincronizaci\xF3n (pesta\xF1a Sincronizaci\xF3n)");
+    // El servidor gratuito se duerme tras 15 min: se le espera hasta 2 minutos.
+    const t0 = Date.now();
+    for (let ok = false; !ok; ) {
+      try {
+        ok = (await fetch(`${serverUrl}/status`)).ok;
+      } catch (e) {
+        ok = false;
+      }
+      if (!ok) {
+        if (Date.now() - t0 > 12e4) throw new Error("el servidor no despierta");
+        setMsg({ ok: true, t: "Despertando el servidor de sincronizaci\xF3n\u2026" });
+        await new Promise((r) => setTimeout(r, 5e3));
+      }
+    }
+    const res = await fetch(`${serverUrl}${path}`, { method, headers: { "X-Axis-Key": syncKey.trim(), "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : void 0 });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error("la clave de sincronizaci\xF3n no es correcta");
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    // El servidor devuelve la lista completa de externos: sustituye a los que hab\xEDa.
+    setPayments((prev) => [...prev.filter((p) => !p.ext), ...data.payments.map(externoAPanel)]);
+  }
+  async function ejecutar(fn, okTxt) {
+    setBusy(true);
+    setMsg({ ok: true, t: "Guardando\u2026" });
+    try {
+      await fn();
+      setMsg({ ok: true, t: okTxt });
+      return true;
+    } catch (e) {
+      setMsg({ ok: false, t: `No se ha guardado: ${e.message}` });
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+  const importe = parseFloat(String(f.amount).replace(",", "."));
+  const valido = f.concept.trim() && f.date && Number.isFinite(importe);
+  async function anadir() {
+    if (!valido) return;
+    const ok = await ejecutar(() => llamar("POST", "/external", { ...f, amount: importe, method: f.status === "paid" ? f.method : "" }), "Pago externo a\xF1adido.");
+    if (ok) setF({ ...vacio, date: f.date, creator: f.creator });
+  }
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const lbl = { fontSize: 12, color: C_MUTED, display: "grid", gap: 3 };
+  const fila = (p) => h("div", { key: p.id, style: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 13, padding: "6px 0", borderBottom: `1px solid ${C_SOFT}` } },
+    h("span", { style: { color: C_MUTED, minWidth: 78 } }, p.d),
+    h("b", { style: { flex: "1 1 160px" } }, p.co, p.cl ? ` \u00B7 ${p.cl}` : "", p.nt ? h("span", { style: { fontWeight: 400, color: C_MUTED } }, ` \u2014 ${p.nt}`) : null),
+    h("span", { style: { color: C_MUTED } }, p.st === "fin" ? p.met : "pendiente", " \u00B7 ", p.cr),
+    h("b", null, eur(p.amt)),
+    p.st === "pen" && h("button", { className: "axis-btn ghost", style: { padding: "3px 8px" }, disabled: busy, onClick: () => ejecutar(() => llamar("PUT", "/external/" + p.id.slice(4), { status: "paid", method: "transferencia" }), "Marcado como cobrado.") }, "Marcar cobrado"),
+    h("button", { className: "axis-btn ghost", style: { padding: "3px 8px" }, disabled: busy, "aria-label": "Eliminar pago externo", onClick: () => {
+      if (window.confirm(`\xBFEliminar el pago externo "${p.co}" de ${eur(p.amt)}?`)) ejecutar(() => llamar("DELETE", "/external/" + p.id.slice(4)), "Pago externo eliminado.");
+    } }, "\u{1F5D1}"));
+  return h("div", { style: { padding: "0 22px 30px" } }, h("section", { style: card },
+    h("h2", { className: "axis-display", style: { margin: "0 0 6px", fontSize: 20, textTransform: "uppercase" } }, "Pagos externos"),
+    h("p", { style: { margin: "0 0 12px", fontSize: 13, color: C_MUTED } }, "Ingresos que no pasan por AimHarder (ajenos al negocio de Axis pero que quieres contabilizar). Se suman a los pagos de AimHarder en este panel y en cada sincronizaci\xF3n. No cubren sesiones de nadie."),
+    h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 } },
+      h("label", { style: lbl }, "Fecha", h("input", { type: "date", className: "axis-input", value: f.date, onChange: set("date") })),
+      h("label", { style: lbl }, "Cliente / origen", h("input", { className: "axis-input", value: f.name, onChange: set("name"), placeholder: "Qui\xE9n paga" })),
+      h("label", { style: lbl }, "Concepto", h("input", { className: "axis-input", value: f.concept, onChange: set("concept"), placeholder: "Ej. Alquiler de sala" })),
+      h("label", { style: lbl }, "Importe (\u20AC)", h("input", { className: "axis-input", inputMode: "decimal", value: f.amount, onChange: set("amount"), placeholder: "0,00" })),
+      h("label", { style: lbl }, "Estado", h("select", { className: "axis-input", value: f.status, onChange: set("status") }, h("option", { value: "paid" }, "Cobrado"), h("option", { value: "pending" }, "Pendiente de cobro"))),
+      f.status === "paid" && h("label", { style: lbl }, "Forma de pago", h("select", { className: "axis-input", value: f.method, onChange: set("method") }, EXT_FORMAS.map(([v, t]) => h("option", { key: v, value: v }, t)))),
+      h("label", { style: lbl }, "Atribuir a", h("select", { className: "axis-input", value: f.creator, onChange: set("creator") }, EXT_CREADORES.map((c) => h("option", { key: c, value: c }, c)))),
+      h("label", { style: lbl }, "Notas (opcional)", h("input", { className: "axis-input", value: f.notes, onChange: set("notes") }))),
+    h("div", { style: { marginTop: 12, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" } },
+      h("button", { className: "axis-btn primary", onClick: anadir, disabled: !valido || busy }, "A\xF1adir pago externo"),
+      msg.t && h("span", { style: { fontSize: 13, color: msg.ok ? "#1F3A2A" : "#9B1C1C" } }, msg.t)),
+    h("h3", { style: { fontSize: 13, margin: "18px 0 8px", color: C_MUTED, textTransform: "uppercase", letterSpacing: ".04em" } }, "Este mes \u00B7 cobrado ", eur(cobrado), pendiente > 0 ? ` \u00B7 pendiente ${eur(pendiente)}` : ""),
+    delMes.length === 0
+      ? h("p", { style: { fontSize: 13, color: C_MUTED, margin: 0 } }, "No hay pagos externos en este mes.", externos.length ? ` (${externos.length} en total)` : "")
+      : h("div", { style: { display: "grid", gap: 2 } }, delMes.map(fila))));
+}
 function parseAimHarderPayments(payments) {
   if (!payments) return [];
   const toAmt = (v) => (typeof v === "number" ? v : parseFloat(String(v ?? "0").replace("€", "").replace(",", ".")) || 0);
@@ -123,13 +217,13 @@ function parseAimHarderPayments(payments) {
     if (p.id == null) continue;
     const d = (p.date || "").slice(0, 10); // "2026-06-01 00:00:00" -> "2026-06-01"
     if (!d) continue;
-    out.push({ id: String(p.id), cl: p.name || "", cat: catFromConcept(p.concept || ""), amt: toAmt(p.amount), c: creatorId(p.creator || ""), cr: p.creator || "", co: p.concept || "", d, st: "pen", met: "" });
+    out.push({ id: String(p.id), cl: p.name || "", cat: catFromConcept(p.concept || ""), amt: toAmt(p.amount), c: creatorId(p.creator || ""), cr: p.creator || "", co: p.concept || "", d, st: "pen", met: "", ...p.ext ? { ext: true, nt: p.notes || "" } : {} });
   }
   for (const p of payments.paid || []) {
     if (p.id == null) continue;
     const d = dmyToISO(p.date || "") || p.issued || "";
     if (!d) continue;
-    out.push({ id: String(p.id), cl: p.name || "", cat: catFromConcept(p.concept || ""), amt: toAmt(p.amount), c: creatorId(p.creator || ""), cr: p.creator || "", co: p.concept || "", d, st: "fin", met: p.method || "", em: p.issued || "" });
+    out.push({ id: String(p.id), cl: p.name || "", cat: catFromConcept(p.concept || ""), amt: toAmt(p.amount), c: creatorId(p.creator || ""), cr: p.creator || "", co: p.concept || "", d, st: "fin", met: p.method || "", em: p.issued || "", ...p.ext ? { ext: true, nt: p.notes || "" } : {} });
   }
   return out;
 }
@@ -742,6 +836,7 @@ function mesDelConcepto(concepto) {
 function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SES_VALORADAS) {
   const credits = /* @__PURE__ */ new Map();
   for (const p of payments) {
+    if (p.ext) continue; // pago externo: no cubre sesiones de AimHarder
     let pr = productOf(p.co, p.cat);
     const fam = creditFamily(pr);
     const key = normName(p.cl);
@@ -1331,7 +1426,7 @@ function GestionTab({ payments, sessions, coaches, nowMin }) {
     { t: "Sesiones 1 a 1 sin cliente apuntado", como: "Apunta al cliente en la sesión o bórrala si no se dio.", items: delMes.filter((r) => r.client === "(sin cliente)").map(fila), mes: true },
     { t: "Fisioterapia impartida por alguien que no es fisio", como: "Si la dio el fisio, cambia el entrenador en AimHarder; si no, se le paga a quien figura.", items: delMes.filter((r) => r.tipo === "Fisioterapia" && !["erik", "marti"].includes(r.coach)).map(fila), mes: true },
     { t: "Sesiones sin entrenador reconocido", como: "Asigna el entrenador en AimHarder: ahora nadie cobra esa sesión.", items: delMes.filter((r) => r.coach === "__none__").map(fila), mes: true },
-    { t: "Conceptos de venta que el panel no reconoce", como: "No se usan para cubrir sesiones. Si incluyen sesiones, dilo en el concepto (p. ej. «Bono 4 sesiones»).", items: payments.filter((p) => (p.d || "").startsWith(month) && p.amt > 0 && productOf(p.co, p.cat).familia === "Otros").map(pago), mes: true },
+    { t: "Conceptos de venta que el panel no reconoce", como: "No se usan para cubrir sesiones. Si incluyen sesiones, dilo en el concepto (p. ej. «Bono 4 sesiones»).", items: payments.filter((p) => (p.d || "").startsWith(month) && p.amt > 0 && !p.ext && productOf(p.co, p.cat).familia === "Otros").map(pago), mes: true },
     { t: "Pagos pendientes desde hace más de 30 días", como: "Reclama el cobro o anúlalo si ya no procede.", items: vencidos.filter((p) => dias(p.d) > 30).sort((a, b) => a.d.localeCompare(b.d)).map((p) => `${pago(p)} · hace ${dias(p.d)} días`) },
     { t: "Pagos pendientes de 0 €", como: "No suman dinero, pero dejan sus sesiones como pendientes de cobro. Márcalos como cobrados o bórralos.", items: payments.filter((p) => p.st === "pen" && !(p.amt > 0)).map(pago) },
     { t: "Pagos agrupados (varias sesiones en un solo pago)", como: "AimHarder corta el concepto y se pierde el precio de cada sesión: el panel reparte el importe a partes iguales. Mejor no agrupar.", items: payments.filter((p) => / \+ /.test(p.co || "") && !stripAccents(p.co || "").includes("iniciacion")).map(pago) }
@@ -1358,12 +1453,71 @@ function GestionTab({ payments, sessions, coaches, nowMin }) {
   const renovar = [...grupos.values()].filter((g) => g.multi && g.left <= 1 && g.ultimo && dias(g.ultimo) <= 45).sort((a, b) => a.left - b.left || b.ultimo.localeCompare(a.ultimo));
 
   const seccion = (titulo, extra, ...hijos) => h("section", { style: { ...card, overflowX: "auto" } }, h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" } }, h("h2", { className: "axis-display", style: h2s }, titulo), extra), ...hijos);
+  // ---------- Resumen del mes, comparado con el anterior (hasta el mismo día si el mes está en curso)
+  const esActual = month === hoy.slice(0, 7);
+  const corte = esActual ? hoy.slice(8, 10) : "31";
+  const mesPrev = shiftMonth(month, -1);
+  const enMes = (d, m) => (d || "").startsWith(m) && d.slice(8, 10) <= corte;
+  const clientesDe = (s) => String(s.client || "").split(",").map((x) => x.trim()).filter((x) => x && normName(x) !== "test");
+  const hechas = useMemo(() => sessions.filter((s) => isDone(s, hoy, nowMin)), [sessions, nowMin]);
+  const primera = /* @__PURE__ */ new Map();
+  for (const s of hechas) for (const c of clientesDe(s)) {
+    const k = normName(c);
+    if (!primera.has(k) || s.date < primera.get(k)) primera.set(k, s.date);
+  }
+  const kpisDe = (m) => {
+    const ss = hechas.filter((s) => enMes(s.date, m) && clientesDe(s).length > 0);
+    return {
+      cobrado: payments.filter((p) => p.st === "fin" && enMes(p.d, m)).reduce((a, p) => a + p.amt, 0),
+      sesiones: ss.length,
+      asist: ss.reduce((a, s) => a + clientesDe(s).length, 0),
+      activos: new Set(ss.flatMap((s) => clientesDe(s).map(normName))).size,
+      nuevos: [...primera.values()].filter((d) => enMes(d, m)).length
+    };
+  };
+  const kA = kpisDe(month), kP = kpisDe(mesPrev);
+  const nombrePrev = monthLabel(mesPrev).split(" ")[0].toLowerCase();
+  const tile = (label, a, p, fmt) => {
+    const dif = p ? (a - p) / p : null;
+    return h("div", { key: label, style: { minWidth: 150 } },
+      h("div", { style: { fontSize: 12, color: C_MUTED } }, label),
+      h("div", { className: "axis-display", style: { fontSize: 28, fontWeight: 700, lineHeight: 1.1 } }, fmt(a)),
+      h("div", { style: { fontSize: 12, color: dif == null || Math.abs(dif) < 5e-3 ? C_MUTED : dif > 0 ? C_GOOD : C_BAD } }, dif == null ? `sin datos de ${nombrePrev}` : `${dif > 0 ? "▲" : dif < 0 ? "▼" : "="} ${Math.abs(Math.round(dif * 100))} % · ${nombrePrev}: ${fmt(p)}`));
+  };
+  const num = (v) => String(v);
+  const resumenSec = seccion(`Resumen · ${etiqueta}`, null,
+    h("p", { style: nota }, esActual ? `Comparado con ${nombrePrev} hasta el mismo día del mes (día ${Number(corte)}).` : `Comparado con ${nombrePrev} completo.`, " Cobrado = cobros con fecha de pago en el periodo, con IVA."),
+    h("div", { style: { display: "flex", gap: 28, flexWrap: "wrap" } },
+      tile("Cobrado", kA.cobrado, kP.cobrado, eur0), tile("Sesiones con clientes", kA.sesiones, kP.sesiones, num), tile("Asistencias", kA.asist, kP.asist, num), tile("Clientes activos", kA.activos, kP.activos, num), tile("Clientes nuevos", kA.nuevos, kP.nuevos, num)));
+
+  // ---------- Clientes que han dejado de venir
+  const historial = /* @__PURE__ */ new Map();
+  for (const s of hechas) for (const c of clientesDe(s)) {
+    const k = normName(c);
+    const g = historial.get(k) || historial.set(k, { cl: c, n: 0, ultima: "", por: {} }).get(k);
+    g.n += 1;
+    if (s.date > g.ultima) g.ultima = s.date;
+    const ck = personKeyOfSession(s, coaches);
+    g.por[ck] = (g.por[ck] || 0) + 1;
+  }
+  const conReserva = new Set(sessions.filter((s) => (s.date || "") > hoy).flatMap((s) => clientesDe(s).map(normName)));
+  const inactivos = [...historial.values()].filter((g) => g.n >= 3 && dias(g.ultima) > 30 && dias(g.ultima) <= 120 && !conReserva.has(normName(g.cl))).sort((a, b) => b.n - a.n);
+  const habitual = (g) => P(Object.entries(g.por).sort((a, b) => b[1] - a[1])[0][0]).short;
+  const textoInactivos = [`*Clientes que han dejado de venir · ${fmtD(hoy)}*`, "", ...inactivos.map((g) => `• ${g.cl}: última sesión el ${fmtD(g.ultima)} (hace ${dias(g.ultima)} días) · ${g.n} sesiones · ${habitual(g)}`)].join("\n");
+  const inactivosSec = seccion(`Clientes que han dejado de venir · ${inactivos.length}`, inactivos.length > 0 && botonCopiar("inactivos", textoInactivos),
+    h("p", { style: nota }, "Clientes con 3 sesiones o más cuya última sesión fue hace entre 1 y 4 meses y que no tienen ninguna reservada. Buen momento para escribirles."),
+    inactivos.length === 0 ? h("p", { style: { fontSize: 13, color: C_MUTED, margin: 0 } }, "Nadie ha dejado de venir. 🎉") : h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 560 } },
+      h("thead", null, h("tr", null, h("th", { style: { ...th, textAlign: "left" } }, "Cliente"), h("th", { style: th }, "Última sesión"), h("th", { style: th }, "Días sin venir"), h("th", { style: th }, "Sesiones hechas"), h("th", { style: { ...th, textAlign: "left" } }, "Entrenador habitual"))),
+      h("tbody", null, inactivos.map((g) => h("tr", { key: g.cl }, h("td", { style: { ...tdL, fontWeight: 600 } }, g.cl), h("td", { style: td }, fmtD(g.ultima)), h("td", { style: { ...td, fontWeight: 700, color: dias(g.ultima) > 60 ? C_BAD : C_WARN } }, dias(g.ultima)), h("td", { style: td }, g.n), h("td", { style: tdL }, habitual(g)))))));
+
   return h("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18 } },
     h("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 14 } },
       h("button", { className: "axis-btn ghost", onClick: () => setMonth(shiftMonth(month, -1)), "aria-label": "Mes anterior" }, "←"),
       h("input", { type: "month", className: "axis-input", style: { width: 160 }, value: month, onChange: (e) => e.target.value && setMonth(e.target.value) }),
       h("button", { className: "axis-btn ghost", onClick: () => setMonth(shiftMonth(month, 1)), "aria-label": "Mes siguiente" }, "→"),
       h("span", { style: { fontSize: 13, color: C_MUTED } }, "El mes afecta a los pagos a entrenadores y a las incidencias de sesiones. La deuda y los bonos por renovar son a día de hoy.")),
+
+    resumenSec,
 
     seccion(`Pagos a entrenadores · ${etiqueta}`, pagos.length > 0 && botonCopiar("pagos", textoPagos),
       h("p", { style: nota }, "Sin IVA. Se paga cada sesión el mes en que se cobra su bono. El detalle sesión a sesión está en «Por persona»."),
@@ -1386,6 +1540,8 @@ function GestionTab({ payments, sessions, coaches, nowMin }) {
         h("p", { style: { margin: "6px 0 4px 28px", fontSize: 12, color: C_MUTED } }, x.como),
         h("ul", { style: { margin: "0 0 0 28px", paddingLeft: 18, fontSize: 12, lineHeight: 1.6 } }, x.items.map((t, i) => h("li", { key: i }, t)))))),
 
+    inactivosSec,
+
     seccion(`Bonos por renovar · ${renovar.length}`, null,
       h("p", { style: nota }, "Clientes activos (con sesión en los últimos 45 días) a los que les queda una sesión o ninguna de su bono. Buen momento para ofrecerles el siguiente."),
       renovar.length === 0 ? h("p", { style: { fontSize: 13, color: C_MUTED, margin: 0 } }, "Ningún bono a punto de acabarse.") : h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 560 } },
@@ -1393,6 +1549,8 @@ function GestionTab({ payments, sessions, coaches, nowMin }) {
         h("tbody", null, renovar.map((g) => h("tr", { key: g.cl + g.fam }, h("td", { style: { ...tdL, fontWeight: 600 } }, g.cl), h("td", { style: tdL }, g.fam), h("td", { style: { ...td, fontWeight: 700, color: g.left === 0 ? C_WARN : void 0 } }, g.left), h("td", { style: td }, fmtD(g.ultimo)), h("td", { style: { ...tdL, color: C_MUTED } }, g.origen, g.st === "pen" ? " · pendiente de cobro" : "")))))));
 }
 
+const AUTO_SYNC_HORAS = 3;
+let AUTO_SYNC_INTENTADO = false;
 function AxisPanel() {
   const [coaches, setCoaches] = useState(DEFAULT_COACHES);
   const [rooms, setRooms] = useState(DEFAULT_ROOMS);
@@ -1465,20 +1623,32 @@ function AxisPanel() {
       if (!res.ok) throw new Error(res.status === 403 || res.status === 429 ? "GitHub ha limitado las lecturas desde esta conexi\xF3n" : `HTTP ${res.status}`);
       const raw = await res.json();
       const gistFile = raw && raw.files && raw.files["axis-sessions.json"];
-      if (!gistFile) return { json: raw, planB: false };
+      if (!gistFile) return { json: raw, planB: false, externos: null };
+      // Pagos externos: fichero aparte del mismo Gist (null = no se ha podido leer).
+      let externos = [];
+      const extFile = raw.files["axis-external-payments.json"];
+      if (extFile) {
+        try {
+          const txt = extFile.truncated && extFile.raw_url ? await (await fetch(extFile.raw_url)).text() : extFile.content;
+          externos = JSON.parse(txt).payments;
+          if (!Array.isArray(externos)) externos = null;
+        } catch (e) {
+          externos = null;
+        }
+      }
       if (raw.owner && raw.owner.login && raw.id) saveKey("axis-gist-raw", `https://gist.githubusercontent.com/${raw.owner.login}/${raw.id}/raw/axis-sessions.json`);
       // La API corta el contenido a partir de ~1 MB: entonces se baja entero.
       if (gistFile.truncated && gistFile.raw_url) {
         const rawRes = await fetch(gistFile.raw_url);
         if (!rawRes.ok) throw new Error(`HTTP ${rawRes.status}`);
-        return { json: await rawRes.json(), planB: false };
+        return { json: await rawRes.json(), planB: false, externos };
       }
-      return { json: JSON.parse(gistFile.content), planB: false };
+      return { json: JSON.parse(gistFile.content), planB: false, externos };
     } catch (e) {
       if (!rawGuardada) throw e;
       const rawRes = await fetch(`${rawGuardada}?_=${Date.now()}`);
       if (!rawRes.ok) throw e;
-      return { json: await rawRes.json(), planB: true };
+      return { json: await rawRes.json(), planB: true, externos: null };
     }
   }
   // Devuelve true si los datos cargados son los de la sincronización recién lanzada.
@@ -1486,7 +1656,7 @@ function AxisPanel() {
     if (!autoSyncUrl.trim()) return false;
     if (!silent) setAutoSyncState({ status: "sync", msg: "Descargando datos actualizados\u2026" });
     try {
-      const { json, planB } = await leerDatosSincronizados();
+      const { json, planB, externos } = await leerDatosSincronizados();
       if (!json || typeof json !== "object" || !json.days || typeof json.days !== "object") throw new Error("los datos no tienen el formato esperado");
       const daysObj = json.days || {};
       let allRecords = [];
@@ -1512,18 +1682,27 @@ function AxisPanel() {
       // las sesiones, aquí no hay ediciones manuales que proteger). Así,
       // si borras un pago en AimHarder, en la siguiente sincronización
       // deja de aparecer también en el panel.
+      // Los pagos externos (ajenos a AimHarder) se suman siempre a los de AimHarder.
+      // Si el fichero de externos no se pudo leer (externos === null) se usan los
+      // que ya trae la sincronización dentro de json.payments.
       let nPagos = 0;
+      const extList = externos ? externos.map(externoAPanel) : [];
       if (json.payments) {
-        const parsedPayments = parseAimHarderPayments(json.payments);
-        nPagos = parsedPayments.length;
-        // Solo reemplazamos si vienen pagos de verdad. Si llegan 0, casi
+        const sinExt = externos ? { pending: (json.payments.pending || []).filter((p) => !p.ext), paid: (json.payments.paid || []).filter((p) => !p.ext) } : json.payments;
+        const parsedPayments = parseAimHarderPayments(sinExt);
+        const nAH = parsedPayments.filter((p) => !p.ext).length;
+        // Solo reemplazamos si vienen pagos de AimHarder de verdad. Si llegan 0, casi
         // siempre significa que la descarga falló en el script — en ese caso
-        // conservamos los que ya teníamos en vez de dejar el panel a cero.
-        if (nPagos > 0) {
-          setPayments(parsedPayments);
+        // conservamos los que ya teníamos (actualizando solo los externos).
+        if (nAH > 0) {
+          nPagos = parsedPayments.length + extList.length;
+          setPayments([...parsedPayments, ...extList]);
         } else {
           console.warn("Sincronización sin pagos: se conservan los anteriores.");
+          if (externos) setPayments((prev) => [...prev.filter((p) => !p.ext), ...extList]);
         }
+      } else if (externos) {
+        setPayments((prev) => [...prev.filter((p) => !p.ext), ...extList]);
       }
 
       // Hora real de los datos (synced_at la escribe sync_axis.py al entrar en
@@ -1540,9 +1719,27 @@ function AxisPanel() {
       const horas = syncedAt ? (Date.now() - syncedAt.getTime()) / 36e5 : 0;
       if (!realStarted && horas >= 24) msg += ` \u26A0\uFE0F Son de hace ${Math.floor(horas / 24)} d\xEDa(s): pulsa \xABSincronizar ahora\xBB antes de usar las cifras.`;
       if (json.payments_stale) msg += " \u26A0\uFE0F Los pagos no se pudieron actualizar en esa sincronizaci\xF3n: son los de la anterior.";
+      // Verificación: lo que muestra el panel tiene que sumar lo mismo que el
+      // servidor leyó de AimHarder (totales de control). Si no, se avisa.
+      const descuadres = [];
+      if (json.control && json.payments) {
+        const c = json.control, r2 = (x) => Math.round(x * 100) / 100;
+        const ah = parseAimHarderPayments({ pending: (json.payments.pending || []).filter((p) => !p.ext), paid: (json.payments.paid || []).filter((p) => !p.ext) });
+        const fin = ah.filter((p) => p.st === "fin"), pen = ah.filter((p) => p.st === "pen");
+        const asist = allRecords.reduce((a, s) => a + String(s.client || "").split(",").filter((x) => x.trim()).length, 0);
+        const comp = (nombre, panel, servidor) => {
+          if (Math.abs(panel - servidor) > 5e-3) descuadres.push(`${nombre}: el panel tiene ${panel} y AimHarder ${servidor}`);
+        };
+        comp("cobros", fin.length, c.cobrados_n);
+        comp("importe cobrado", r2(fin.reduce((a, p) => a + p.amt, 0)), c.cobrados_eur);
+        comp("pagos pendientes", pen.length, c.pendientes_n);
+        comp("importe pendiente", r2(pen.reduce((a, p) => a + p.amt, 0)), c.pendientes_eur);
+        comp("asistencias a sesiones", asist, c.asistencias);
+        msg += descuadres.length ? ` \u26A0\uFE0F DESCUADRE con AimHarder (${descuadres.join("; ")}). No uses las cifras y avisa.` : " \u2705 Verificado: pagos y asistencias coinciden con lo le\xEDdo de AimHarder.";
+      }
       if (planB) msg += " (Le\xEDdo por la v\xEDa de reserva de GitHub: puede ir unos minutos por detr\xE1s.)";
       setSyncedAtMs(syncedAt ? syncedAt.getTime() : null);
-      setAutoSyncState({ status: enTiempoReal || !realStarted ? "done" : "error", msg });
+      setAutoSyncState({ status: descuadres.length ? "error" : enTiempoReal || !realStarted ? "done" : "error", msg });
       return !!enTiempoReal;
     } catch (e) {
       // Si falla la lectura NO se toca nada: el panel sigue con lo último que tenía guardado.
@@ -1607,6 +1804,15 @@ function AxisPanel() {
   useEffect(() => {
     if (loaded && autoSyncUrl.trim()) handleAutoSync(true);
   }, [loaded]);
+  // Si al abrir los datos tienen más de AUTO_SYNC_HORAS y este portátil tiene la
+  // clave, se lanza una sincronización real sola (una vez por apertura).
+  useEffect(() => {
+    if (!loaded || AUTO_SYNC_INTENTADO || !syncedAtMs || !syncKey.trim() || autoSyncState.status === "sync") return;
+    if (Date.now() - syncedAtMs > AUTO_SYNC_HORAS * 36e5) {
+      AUTO_SYNC_INTENTADO = true;
+      handleRealSync();
+    }
+  }, [loaded, syncedAtMs]);
   const payStats = useMemo(() => {
     // El titular se recalcula desde el "Creado por" original (cr), así la regla
     // Axis/Marc se aplica también a pagos guardados en el navegador antes del cambio.
@@ -1837,7 +2043,7 @@ function AxisPanel() {
       value: autoSyncUrl,
       onChange: (e) => setAutoSyncUrl(e.target.value)
     }
-  ), /* @__PURE__ */ React.createElement("button", { className: "axis-btn primary", onClick: () => handleRealSync(), disabled: !autoSyncUrl.trim() || autoSyncState.status === "sync" }, autoSyncState.status === "sync" ? "Sincronizando\u2026" : "Sincronizar ahora")), autoSyncState.status !== "idle" && /* @__PURE__ */ React.createElement("p", { style: { marginTop: 10, fontSize: 13, color: autoSyncState.status === "error" ? "#9B1C1C" : "#1F3A2A" } }, autoSyncState.status === "sync" ? "\u23F3 " : autoSyncState.status === "done" ? "\u2705 " : "\u26A0\uFE0F ", autoSyncState.msg), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("input", { className: "axis-input", type: "password", style: { width: 260 }, placeholder: "Clave de sincronización", value: syncKey, onChange: (e) => setSyncKey(e.target.value) }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#5A6B63" } }, syncKey.trim() ? "«Sincronizar ahora» entra en AimHarder en ese momento (1-2 min)." : "Introdúcela una vez en cada portátil para que «Sincronizar ahora» entre en AimHarder en ese momento."))), /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: 0, fontSize: 20, textTransform: "uppercase" } }, "Sesiones del ", fmtDateHuman(date))), !daySessions.length && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: "#5A6B63" } }, "Sin sesiones este d\xEDa."), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gap: 8, marginTop: 10 } }, daySessions.map((s) => /* @__PURE__ */ React.createElement("div", { key: s.id, style: { display: "grid", gridTemplateColumns: "70px 70px 1fr 1fr 1fr 1fr 60px", gap: 6, alignItems: "center", fontSize: 13 } }, /* @__PURE__ */ React.createElement("input", { className: "axis-input", type: "time", value: s.start, onChange: (e) => updateSession(s.id, { start: e.target.value }) }), /* @__PURE__ */ React.createElement("input", { className: "axis-input", type: "time", value: s.end, onChange: (e) => updateSession(s.id, { end: e.target.value }) }), /* @__PURE__ */ React.createElement("select", { className: "axis-input", value: s.coachId || "", onChange: (e) => updateSession(s.id, { coachId: e.target.value || null }) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "(", s.coachRaw || "sin coach", ")"), coaches.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, c.name))), /* @__PURE__ */ React.createElement("select", { className: "axis-input", value: s.roomId, onChange: (e) => updateSession(s.id, { roomId: e.target.value }) }, rooms.map((r) => /* @__PURE__ */ React.createElement("option", { key: r.id, value: r.id }, r.name))), /* @__PURE__ */ React.createElement("input", { className: "axis-input", value: s.title, onChange: (e) => updateSession(s.id, { title: e.target.value }), placeholder: "Actividad" }), /* @__PURE__ */ React.createElement("input", { className: "axis-input", value: s.client || "", onChange: (e) => updateSession(s.id, { client: e.target.value }), placeholder: "Cliente" }), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => deleteSession(s.id), "aria-label": "Eliminar sesi\xF3n" }, "\u{1F5D1}")))))), tab === "stats" && (() => {
+  ), /* @__PURE__ */ React.createElement("button", { className: "axis-btn primary", onClick: () => handleRealSync(), disabled: !autoSyncUrl.trim() || autoSyncState.status === "sync" }, autoSyncState.status === "sync" ? "Sincronizando\u2026" : "Sincronizar ahora")), autoSyncState.status !== "idle" && /* @__PURE__ */ React.createElement("p", { style: { marginTop: 10, fontSize: 13, color: autoSyncState.status === "error" ? "#9B1C1C" : "#1F3A2A" } }, autoSyncState.status === "sync" ? "\u23F3 " : autoSyncState.status === "done" ? "\u2705 " : "\u26A0\uFE0F ", autoSyncState.msg), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("input", { className: "axis-input", type: "password", style: { width: 260 }, placeholder: "Clave de sincronización", value: syncKey, onChange: (e) => setSyncKey(e.target.value) }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#5A6B63" } }, syncKey.trim() ? "«Sincronizar ahora» entra en AimHarder en ese momento (1-2 min). Además, al abrir el panel se sincroniza solo si los datos tienen más de 3 horas." : "Introdúcela una vez en cada portátil para que «Sincronizar ahora» entre en AimHarder en ese momento."))), /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: 0, fontSize: 20, textTransform: "uppercase" } }, "Sesiones del ", fmtDateHuman(date))), !daySessions.length && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: "#5A6B63" } }, "Sin sesiones este d\xEDa."), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gap: 8, marginTop: 10 } }, daySessions.map((s) => /* @__PURE__ */ React.createElement("div", { key: s.id, style: { display: "grid", gridTemplateColumns: "70px 70px 1fr 1fr 1fr 1fr 60px", gap: 6, alignItems: "center", fontSize: 13 } }, /* @__PURE__ */ React.createElement("input", { className: "axis-input", type: "time", value: s.start, onChange: (e) => updateSession(s.id, { start: e.target.value }) }), /* @__PURE__ */ React.createElement("input", { className: "axis-input", type: "time", value: s.end, onChange: (e) => updateSession(s.id, { end: e.target.value }) }), /* @__PURE__ */ React.createElement("select", { className: "axis-input", value: s.coachId || "", onChange: (e) => updateSession(s.id, { coachId: e.target.value || null }) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "(", s.coachRaw || "sin coach", ")"), coaches.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, c.name))), /* @__PURE__ */ React.createElement("select", { className: "axis-input", value: s.roomId, onChange: (e) => updateSession(s.id, { roomId: e.target.value }) }, rooms.map((r) => /* @__PURE__ */ React.createElement("option", { key: r.id, value: r.id }, r.name))), /* @__PURE__ */ React.createElement("input", { className: "axis-input", value: s.title, onChange: (e) => updateSession(s.id, { title: e.target.value }), placeholder: "Actividad" }), /* @__PURE__ */ React.createElement("input", { className: "axis-input", value: s.client || "", onChange: (e) => updateSession(s.id, { client: e.target.value }), placeholder: "Cliente" }), /* @__PURE__ */ React.createElement("button", { className: "axis-btn ghost", onClick: () => deleteSession(s.id), "aria-label": "Eliminar sesi\xF3n" }, "\u{1F5D1}")))))), tab === "stats" && (() => {
     const colName = (id) => {
       var _a;
       return id === "__none__" ? "Sin asignar" : ((_a = coaches.find((c) => c.id === id)) == null ? void 0 : _a.name) || id;
@@ -1877,7 +2083,7 @@ function AxisPanel() {
       var _a, _b;
       return /* @__PURE__ */ React.createElement("td", { key: c, style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, textAlign: "right", fontWeight: 700 } }, eur(((_a = payStats.totals[c]) == null ? void 0 : _a.amt) || 0), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#5A6B63" } }, "(", ((_b = payStats.totals[c]) == null ? void 0 : _b.n) || 0, ")"));
     }), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, textAlign: "right", fontWeight: 800 } }, eur(payStats.grand), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#5A6B63" } }, "(", payStats.n, ")"))))), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: "#5A6B63", marginBottom: 0 } }, '"Creado por" indica qui\xE9n registr\xF3 el cobro, no necesariamente qui\xE9n dio la sesi\xF3n. La columna "Axis" re\xFAne los pagos creados con la cuenta del centro (Axis Health & Performance) o por el administrador: son ingresos del centro y no se suman a Marc, igual que en el Excel del plan financiero.')));
-  })(), tab === "objetivos" && /* @__PURE__ */ React.createElement(ObjetivosTab, { payments, coaches }), tab === "personas" && /* @__PURE__ */ React.createElement(PersonasTab, { payments, sessions, coaches, nowMin }), tab === "gestion" && /* @__PURE__ */ React.createElement(GestionTab, { payments, sessions, coaches, nowMin }), tab === "equipo" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18, maxWidth: 760 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Equipo"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 12px", fontSize: 13, color: "#5A6B63" } }, "El email es el que se a\xF1adir\xE1 como invitado dentro del archivo .ics. Sin email, el evento se genera igualmente pero sin invitado."), coaches.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: c.id, style: { display: "grid", gridTemplateColumns: "36px 110px 150px 1fr auto", gap: 8, alignItems: "center", marginBottom: 8 } }, /* @__PURE__ */ React.createElement(
+  })(), tab === "stats" && /* @__PURE__ */ React.createElement(PagosExternosCard, { payments, setPayments, syncKey, serverUrl: SYNC_SERVER_URL, month }), tab === "objetivos" && /* @__PURE__ */ React.createElement(ObjetivosTab, { payments, coaches }), tab === "personas" && /* @__PURE__ */ React.createElement(PersonasTab, { payments, sessions, coaches, nowMin }), tab === "gestion" && /* @__PURE__ */ React.createElement(GestionTab, { payments, sessions, coaches, nowMin }), tab === "equipo" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18, maxWidth: 760 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Equipo"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 12px", fontSize: 13, color: "#5A6B63" } }, "El email es el que se a\xF1adir\xE1 como invitado dentro del archivo .ics. Sin email, el evento se genera igualmente pero sin invitado."), coaches.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: c.id, style: { display: "grid", gridTemplateColumns: "36px 110px 150px 1fr auto", gap: 8, alignItems: "center", marginBottom: 8 } }, /* @__PURE__ */ React.createElement(
     "input",
     {
       type: "color",
