@@ -1566,7 +1566,11 @@ function AxisPanel() {
     return d.getHours() * 60 + d.getMinutes();
   });
   const [month, setMonth] = useState(todayISO().slice(0, 7));
-  const [payments, setPayments] = useState([]);
+  const [paymentsRaw, setPayments] = useState([]);
+  // Caja de Axis (Supabase, tiempo real): trae los importes reales; AimHarder, sesiones y bonos.
+  const caja = CajaAxis.useCaja();
+  const cajaAplicada = useMemo(() => CajaAxis.aplicar(paymentsRaw, caja.pagos), [paymentsRaw, caja.pagos]);
+  const payments = cajaAplicada.payments;
   const [payFilter, setPayFilter] = useState("fin");
   const [autoSyncUrl, setAutoSyncUrl] = useState("");
   const [autoSyncState, setAutoSyncState] = useState({ status: "idle", msg: "" });
@@ -1604,8 +1608,8 @@ function AxisPanel() {
     if (loaded) saveKey("axis-sessions", sessions);
   }, [sessions, loaded]);
   useEffect(() => {
-    if (loaded) saveKey("axis-payments", payments);
-  }, [payments, loaded]);
+    if (loaded) saveKey("axis-payments", paymentsRaw);
+  }, [paymentsRaw, loaded]);
   useEffect(() => {
     if (loaded && autoSyncUrl) saveKey("axis-autosync-url", autoSyncUrl);
   }, [autoSyncUrl, loaded]);
@@ -1813,6 +1817,16 @@ function AxisPanel() {
       handleRealSync();
     }
   }, [loaded, syncedAtMs]);
+  // Cada cliente de AimHarder (pagos y sesiones) se da de alta en la Caja si no existe.
+  const nombresAH = useMemo(() => {
+    const n = /* @__PURE__ */ new Set();
+    for (const p of paymentsRaw) if (!p.ext && p.cl) n.add(p.cl);
+    for (const x of sessions) for (const c of String(x.client || "").split(",")) if (c.trim()) n.add(c.trim());
+    return [...n];
+  }, [paymentsRaw, sessions]);
+  useEffect(() => {
+    if (loaded && caja.estado === "ok" && caja.puedeEditar && nombresAH.length) caja.api.asegurarClientes(nombresAH);
+  }, [loaded, caja.estado, caja.puedeEditar, nombresAH]);
   const payStats = useMemo(() => {
     // El titular se recalcula desde el "Creado por" original (cr), así la regla
     // Axis/Marc se aplica también a pagos guardados en el navegador antes del cambio.
@@ -1988,7 +2002,7 @@ function AxisPanel() {
     var _a;
     return ((_a = coachOf(s)) == null ? void 0 : _a.name) || s.coachRaw || "\xBFCoach?";
   };
-  return /* @__PURE__ */ React.createElement("div", { className: "axis-root" }, /* @__PURE__ */ React.createElement("style", null, css), (autoSyncState.status === "error" || syncedAtMs && Date.now() - syncedAtMs > 864e5) && tab !== "sesiones" && /* @__PURE__ */ React.createElement("div", { role: "status", style: { background: "#FEF3E7", color: "#7A4A0B", padding: "8px 22px", fontSize: 13, fontWeight: 600, cursor: "pointer" }, onClick: () => setTab("sesiones") }, autoSyncState.status === "error" ? "\u26A0\uFE0F Hay un problema con la sincronizaci\xF3n de AimHarder: las cifras pueden no estar al d\xEDa. Pulsa aqu\xED para verlo." : `\u26A0\uFE0F Los datos de AimHarder son de hace ${Math.floor((Date.now() - syncedAtMs) / 864e5)} d\xEDa(s). Pulsa aqu\xED y dale a \xABSincronizar ahora\xBB.`), /* @__PURE__ */ React.createElement("header", { style: { background: "#12211B", color: "#fff", padding: "18px 22px 0" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("h1", { className: "axis-display", style: { margin: 0, fontSize: 30, fontWeight: 700, textTransform: "uppercase" } }, "Axis \xB7 Panel de salas"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#9DB4A9" } }, "Horarios por sala \xB7 exporta a Google Calendar / Outlook")), /* @__PURE__ */ React.createElement("nav", { style: { marginTop: 10, display: "flex", overflowX: "auto", WebkitOverflowScrolling: "touch" } }, [["horario", "Horario"], ["sesiones", "Sincronizaci\xF3n"], ["stats", "Resumen mensual"], ["objetivos", "Objetivos"], ["personas", "Por persona"], ["gestion", "Gesti\xF3n"], ["equipo", "Equipo y salas"]].map(([id, label]) => /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement("div", { className: "axis-root" }, /* @__PURE__ */ React.createElement("style", null, css), (autoSyncState.status === "error" || syncedAtMs && Date.now() - syncedAtMs > 864e5) && tab !== "sesiones" && /* @__PURE__ */ React.createElement("div", { role: "status", style: { background: "#FEF3E7", color: "#7A4A0B", padding: "8px 22px", fontSize: 13, fontWeight: 600, cursor: "pointer" }, onClick: () => setTab("sesiones") }, autoSyncState.status === "error" ? "\u26A0\uFE0F Hay un problema con la sincronizaci\xF3n de AimHarder: las cifras pueden no estar al d\xEDa. Pulsa aqu\xED para verlo." : `\u26A0\uFE0F Los datos de AimHarder son de hace ${Math.floor((Date.now() - syncedAtMs) / 864e5)} d\xEDa(s). Pulsa aqu\xED y dale a \xABSincronizar ahora\xBB.`), /* @__PURE__ */ React.createElement("header", { style: { background: "#12211B", color: "#fff", padding: "18px 22px 0" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("h1", { className: "axis-display", style: { margin: 0, fontSize: 30, fontWeight: 700, textTransform: "uppercase" } }, "Axis \xB7 Panel de salas"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#9DB4A9" } }, "Horarios por sala \xB7 exporta a Google Calendar / Outlook")), /* @__PURE__ */ React.createElement("nav", { style: { marginTop: 10, display: "flex", overflowX: "auto", WebkitOverflowScrolling: "touch" } }, [["horario", "Horario"], ["sesiones", "Sincronizaci\xF3n"], ["stats", "Resumen mensual"], ["caja", "Caja"], ["objetivos", "Objetivos"], ["personas", "Por persona"], ["gestion", "Gesti\xF3n"], ["equipo", "Equipo y salas"]].map(([id, label]) => /* @__PURE__ */ React.createElement(
     "button",
     {
       key: id,
@@ -2083,7 +2097,7 @@ function AxisPanel() {
       var _a, _b;
       return /* @__PURE__ */ React.createElement("td", { key: c, style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, textAlign: "right", fontWeight: 700 } }, eur(((_a = payStats.totals[c]) == null ? void 0 : _a.amt) || 0), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#5A6B63" } }, "(", ((_b = payStats.totals[c]) == null ? void 0 : _b.n) || 0, ")"));
     }), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, textAlign: "right", fontWeight: 800 } }, eur(payStats.grand), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#5A6B63" } }, "(", payStats.n, ")"))))), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: "#5A6B63", marginBottom: 0 } }, '"Creado por" indica qui\xE9n registr\xF3 el cobro, no necesariamente qui\xE9n dio la sesi\xF3n. La columna "Axis" re\xFAne los pagos creados con la cuenta del centro (Axis Health & Performance) o por el administrador: son ingresos del centro y no se suman a Marc, igual que en el Excel del plan financiero.')));
-  })(), tab === "stats" && /* @__PURE__ */ React.createElement(PagosExternosCard, { payments, setPayments, syncKey, serverUrl: SYNC_SERVER_URL, month }), tab === "objetivos" && /* @__PURE__ */ React.createElement(ObjetivosTab, { payments, coaches }), tab === "personas" && /* @__PURE__ */ React.createElement(PersonasTab, { payments, sessions, coaches, nowMin }), tab === "gestion" && /* @__PURE__ */ React.createElement(GestionTab, { payments, sessions, coaches, nowMin }), tab === "equipo" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18, maxWidth: 760 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Equipo"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 12px", fontSize: 13, color: "#5A6B63" } }, "El email es el que se a\xF1adir\xE1 como invitado dentro del archivo .ics. Sin email, el evento se genera igualmente pero sin invitado."), coaches.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: c.id, style: { display: "grid", gridTemplateColumns: "36px 110px 150px 1fr auto", gap: 8, alignItems: "center", marginBottom: 8 } }, /* @__PURE__ */ React.createElement(
+  })(), tab === "stats" && /* @__PURE__ */ React.createElement(PagosExternosCard, { payments: paymentsRaw, setPayments, syncKey, serverUrl: SYNC_SERVER_URL, month }), tab === "caja" && /* @__PURE__ */ React.createElement(CajaAxis.CajaTab, { caja, info: cajaAplicada.info, month, setMonth }), tab === "objetivos" && /* @__PURE__ */ React.createElement(ObjetivosTab, { payments, coaches }), tab === "personas" && /* @__PURE__ */ React.createElement(PersonasTab, { payments, sessions, coaches, nowMin }), tab === "gestion" && /* @__PURE__ */ React.createElement(GestionTab, { payments, sessions, coaches, nowMin }), tab === "equipo" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18, maxWidth: 760 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Equipo"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 12px", fontSize: 13, color: "#5A6B63" } }, "El email es el que se a\xF1adir\xE1 como invitado dentro del archivo .ics. Sin email, el evento se genera igualmente pero sin invitado."), coaches.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: c.id, style: { display: "grid", gridTemplateColumns: "36px 110px 150px 1fr auto", gap: 8, alignItems: "center", marginBottom: 8 } }, /* @__PURE__ */ React.createElement(
     "input",
     {
       type: "color",
