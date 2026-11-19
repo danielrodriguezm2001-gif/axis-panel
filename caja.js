@@ -1,18 +1,16 @@
-/* Caja de Axis: pagos de productos registrados en Supabase (tiempo real, varios
- * usuarios, varios dispositivos) y emparejados con los pagos de AimHarder.
+/* Conexión del panel con la Caja de Axis (aplicación independiente, otra URL).
  *
- * Reparto de datos:
- *   - AimHarder: sesiones, reservas, bonos y su estructura (cliente, producto, fecha).
- *   - Caja (Supabase): lo que de verdad se cobra (importe, forma de pago, quién vende).
- * Cada pago de la Caja se empareja con el pago de AimHarder del mismo cliente y
- * producto con la fecha más cercana (±7 días) y le pone su importe. Se puede
- * corregir a mano. Lo que no tenga pareja en AimHarder cuenta como ingreso, pero
- * no cubre sesiones.
+ * La Caja (Supabase) es donde se registran los pagos de productos con su importe
+ * real; el panel solo los LEE y se los pone a los pagos de AimHarder (que van a
+ * 0 €): cada pago de la Caja se empareja con el de AimHarder del mismo cliente y
+ * producto con la fecha más cercana (±7 días). Aquí solo se revisa ese emparejado.
+ * Lo que no tenga pareja en AimHarder cuenta como ingreso, pero no cubre sesiones.
  *
  * Se carga ANTES de panel.js (que lo usa al pintar). Usa funciones de panel.js
  * (normName, productOf, catFromConcept, creatorId, todayISO) solo al ejecutarse.
  */
 (function () {
+  const URL_CAJA = "https://danielrodriguezm2001-gif.github.io/axis-caja/";
   const SB_URL = "https://jakvmfippiakvfgvzeam.supabase.co";
   const SB_KEY = "sb_publishable_OYbWV66QORfVoj0Gj0NqIw_mkPSgiYQ"; // clave pública: los permisos los da RLS
   const TOLERANCIA_DIAS = 7;
@@ -161,25 +159,6 @@
         if (e) throw new Error(e.message === "Invalid login credentials" ? "Email o contraseña incorrectos." : e.message);
       },
       async salir() { await sb.auth.signOut(); },
-      async guardarPago(d, id) {
-        if (!puedeEditar) throw new Error("Tu usuario solo puede ver la Caja.");
-        const nombre = d.cliente_nombre.trim();
-        let cliente = nombre ? clientesRef.current.find((c) => c.nombre_norm === normName(nombre)) : null;
-        if (nombre && !cliente) {
-          const { data, error: e } = await sb.from("caja_clientes").upsert({ nombre, nombre_norm: normName(nombre), origen: "manual" }, { onConflict: "nombre_norm" }).select().single();
-          if (e) throw e;
-          cliente = data;
-        }
-        const fila = { cliente_id: cliente ? cliente.id : null, cliente_nombre: cliente ? cliente.nombre : "", concepto: d.concepto.trim(), importe_cents: Math.round(d.importe * 100), fecha: d.fecha, forma_pago: d.forma_pago, estado: d.estado, vendedor: d.vendedor, sin_aimharder: !!d.sin_aimharder, notas: d.notas.trim(), updated_at: new Date().toISOString() };
-        const r = id ? await sb.from("caja_pagos").update(fila).eq("id", id) : await sb.from("caja_pagos").insert({ ...fila, creado_por: sesion.user.email });
-        if (r.error) throw r.error;
-        await cargar();
-      },
-      async borrarPago(id) {
-        const { error: e } = await sb.from("caja_pagos").delete().eq("id", id);
-        if (e) throw e;
-        await cargar();
-      },
       // ahId: pago de AimHarder concreto; null con sinAH=false => automático; sinAH=true => no existe en AimHarder
       async vincular(id, ahId, sinAH) {
         const { error: e } = await sb.from("caja_pagos").update({ aimharder_pago_id: ahId || null, sin_aimharder: !!sinAH, updated_at: new Date().toISOString() }).eq("id", id);
@@ -210,7 +189,6 @@
   /* ---------- pantalla ---------- */
   const box = { background: "#fff", border: `1px solid ${LINE}`, borderRadius: 12, padding: 16 };
   const lbl = { fontSize: 12, color: MUTED, display: "grid", gap: 3 };
-  const vacio = () => ({ fecha: todayISO(), cliente_nombre: "", concepto: "", importe: "", forma_pago: "tarjeta", estado: "cobrado", vendedor: "", sin_aimharder: false, notas: "" });
 
   function Login({ caja }) {
     const [email, setEmail] = useState("");
@@ -229,36 +207,17 @@
       msg && h("p", { style: { margin: 0, fontSize: 13, color: BAD } }, msg));
   }
 
-  function CajaTab({ caja, info, month, setMonth }) {
-    const [f, setF] = useState(vacio());
-    const [editId, setEditId] = useState(null);
-    const [msg, setMsg] = useState({ ok: true, t: "" });
-    const [busy, setBusy] = useState(false);
-    const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
-    const importe = parseFloat(String(f.importe).replace(",", "."));
-    const valido = f.fecha && f.concepto.trim() && Number.isFinite(importe) && importe >= 0;
-    const ejecutar = async (fn, okTxt) => {
-      setBusy(true); setMsg({ ok: true, t: "Guardando…" });
-      try { await fn(); setMsg({ ok: true, t: okTxt }); return true; }
-      catch (e) { setMsg({ ok: false, t: "No se ha guardado: " + (e.message || e) }); return false; }
-      finally { setBusy(false); }
-    };
-    const guardar = async () => {
-      if (!valido) return;
-      const ok = await ejecutar(() => caja.api.guardarPago({ ...f, importe }, editId), editId ? "Cambios guardados." : "Pago registrado.");
-      if (ok) { setEditId(null); setF({ ...vacio(), fecha: f.fecha, vendedor: f.vendedor }); }
-    };
-    const editar = (c) => {
-      setEditId(c.id);
-      setF({ fecha: c.fecha, cliente_nombre: c.cliente_nombre, concepto: c.concepto, importe: String(c.importe_cents / 100).replace(".", ","), forma_pago: c.forma_pago, estado: c.estado, vendedor: c.vendedor, sin_aimharder: c.sin_aimharder, notas: c.notas });
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    };
+  const enlaceCaja = h("a", { href: URL_CAJA, target: "_blank", rel: "noopener", style: { color: "#2563EB", fontSize: 13 } }, "Abrir la Caja ↗");
 
+  // Pestaña «Cobros»: revisión del emparejado entre la Caja y AimHarder.
+  function CobrosTab({ caja, info, month, setMonth }) {
+    const [msg, setMsg] = useState("");
+    const [busy, setBusy] = useState(false);
     if (caja.estado === "cargando") return h("div", { style: { padding: "18px 22px" } }, h("p", { style: { color: MUTED, fontSize: 13 } }, "Conectando con la Caja…"));
     if (caja.estado === "sin-sesion" || caja.estado === "error" && !caja.sesion) {
       return h("div", { style: { padding: "0 22px 30px" } }, h("section", { style: box },
-        h("h2", { className: "axis-display", style: { margin: "0 0 6px", fontSize: 20, textTransform: "uppercase" } }, "Caja de Axis"),
-        h("p", { style: { margin: "0 0 12px", fontSize: 13, color: MUTED } }, "Entra con tu usuario para ver y registrar los pagos de productos. Los cambios se ven al instante en todos los dispositivos."),
+        h("h2", { className: "axis-display", style: { margin: "0 0 6px", fontSize: 20, textTransform: "uppercase" } }, "Cobros · Caja de Axis"),
+        h("p", { style: { margin: "0 0 12px", fontSize: 13, color: MUTED } }, "Entra con tu usuario de la Caja para que el panel use el importe real de los pagos (en AimHarder van a 0 €). Los pagos se registran en la Caja: ", enlaceCaja),
         caja.error && h("p", { style: { fontSize: 13, color: BAD } }, caja.error),
         caja.estado === "sin-sesion" && h(Login, { caja })));
     }
@@ -267,34 +226,21 @@
         h("p", { style: { margin: "0 0 10px", fontSize: 14 } }, `Has entrado como ${caja.sesion.user.email}, pero ese usuario no tiene acceso a la Caja. Pide que te añadan.`),
         h("button", { className: "axis-btn ghost", onClick: () => caja.api.salir() }, "Salir")));
     }
-
     const delMes = caja.pagos.filter((c) => (c.fecha || "").startsWith(month));
-    const cobrado = delMes.filter((c) => c.estado === "cobrado").reduce((a, c) => a + c.importe_cents, 0) / 100;
-    const pendiente = delMes.filter((c) => c.estado === "pendiente").reduce((a, c) => a + c.importe_cents, 0) / 100;
-    const ceroMes = info.ceroSinCaja.filter((p) => (p.d || "").startsWith(month));
-    const conceptos = [...new Set(caja.pagos.map((c) => c.concepto))].sort();
-
-    const fila = (c) => {
-      const par = info.pareja.get(c.id);
-      const cand = info.candidatos(c);
-      const valor = c.sin_aimharder ? "__ninguno" : c.aimharder_pago_id || "";
-      const estadoTxt = par ? `✓ emparejado con AimHarder (${par.d})` : c.sin_aimharder ? "Sin AimHarder" : "⚠ sin pareja en AimHarder";
-      return h("div", { key: c.id, style: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 13, padding: "8px 0", borderBottom: `1px solid ${SOFT}` } },
-        h("span", { style: { color: MUTED, minWidth: 78 } }, c.fecha),
-        h("b", { style: { flex: "1 1 180px" } }, c.concepto, c.cliente_nombre ? ` · ${c.cliente_nombre}` : "", c.notas ? h("span", { style: { fontWeight: 400, color: MUTED } }, ` — ${c.notas}`) : null),
-        h("span", { style: { color: MUTED } }, c.estado === "cobrado" ? c.forma_pago : "pendiente", c.vendedor ? ` · ${c.vendedor}` : ""),
-        h("b", null, eur2(c.importe_cents / 100)),
-        h("span", { style: { fontSize: 12, color: par || c.sin_aimharder ? GOOD : WARN } }, estadoTxt),
-        caja.puedeEditar && h("select", { className: "axis-input", style: { width: 170 }, value: valor, disabled: busy, "aria-label": "Vínculo con AimHarder",
-          onChange: (e) => { const v = e.target.value; ejecutar(() => caja.api.vincular(c.id, v && v !== "__ninguno" ? v : null, v === "__ninguno"), "Vínculo actualizado."); } },
-          h("option", { value: "" }, "Emparejar automático"), h("option", { value: "__ninguno" }, "No existe en AimHarder"),
-          cand.map((p) => h("option", { key: p.id, value: String(p.id) }, `${p.d} · ${p.co} · AH ${eur2(p.amt)}`))),
-        caja.puedeEditar && h("button", { className: "axis-btn ghost", style: { padding: "3px 8px" }, onClick: () => editar(c) }, "Editar"),
-        caja.puedeEditar && h("button", { className: "axis-btn ghost", style: { padding: "3px 8px" }, disabled: busy, "aria-label": "Eliminar pago", onClick: () => {
-          if (window.confirm(`¿Eliminar el pago "${c.concepto}" de ${eur2(c.importe_cents / 100)}?`)) ejecutar(() => caja.api.borrarPago(c.id), "Pago eliminado.");
-        } }, "\u{1F5D1}"));
+    const sinPareja = info.sinPareja.filter((c) => (c.fecha || "").startsWith(month));
+    const ceroMes = info.ceroSinCaja.filter((p) => (p.d || "").startsWith(month)).sort((a, b) => (a.d || "").localeCompare(b.d || ""));
+    const emparejados = delMes.filter((c) => info.pareja.has(c.id)).length;
+    const vincular = async (c, v) => {
+      setBusy(true); setMsg("Guardando…");
+      try { await caja.api.vincular(c.id, v && v !== "__ninguno" ? v : null, v === "__ninguno"); setMsg("Vínculo actualizado."); } catch (e) { setMsg("No se ha guardado: " + (e.message || e)); } finally { setBusy(false); }
     };
-
+    const fila = (c) => h("div", { key: c.id, style: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 13, padding: "8px 0", borderBottom: `1px solid ${SOFT}` } },
+      h("span", { style: { color: MUTED, minWidth: 78 } }, c.fecha),
+      h("b", { style: { flex: "1 1 180px" } }, c.concepto, c.cliente_nombre ? ` · ${c.cliente_nombre}` : ""),
+      h("b", null, eur2(c.importe_cents / 100)),
+      caja.puedeEditar && h("select", { className: "axis-input", style: { width: 230 }, value: "", disabled: busy, "aria-label": "Vincular con un pago de AimHarder", onChange: (e) => vincular(c, e.target.value) },
+        h("option", { value: "" }, "Vincular con un pago de AimHarder…"), h("option", { value: "__ninguno" }, "No existe en AimHarder"),
+        info.candidatos(c).map((p) => h("option", { key: p.id, value: String(p.id) }, `${p.d} · ${p.co} · AH ${eur2(p.amt)}`))));
     return h("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18 } },
       h("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 14 } },
         h("button", { className: "axis-btn ghost", onClick: () => setMonth(shiftMonth(month, -1)), "aria-label": "Mes anterior" }, "←"),
@@ -304,36 +250,20 @@
           caja.desactualizado ? "⚠ Sin conexión con la Caja: datos guardados · " : caja.enVivo ? "● En tiempo real · " : "Conectando… · ",
           caja.sesion.user.email, ` (${caja.rol}) `, h("button", { className: "axis-btn ghost", style: { padding: "2px 8px", marginLeft: 6 }, onClick: () => caja.api.salir() }, "Salir"))),
       caja.error && h("p", { style: { margin: 0, fontSize: 13, color: BAD } }, caja.error),
-      caja.puedeEditar && h("section", { style: box },
-        h("h2", { className: "axis-display", style: { margin: "0 0 6px", fontSize: 20, textTransform: "uppercase" } }, editId ? "Editar pago" : "Registrar pago de producto"),
-        h("p", { style: { margin: "0 0 12px", fontSize: 13, color: MUTED } }, "Apunta el importe real y la fecha en la que se hace el pago: con cliente, producto y fecha se empareja solo con el pago de AimHarder (el de 0 € que trae las sesiones y el bono)."),
-        h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 } },
-          h("label", { style: lbl }, h("b", { style: { color: INK } }, "Fecha del pago"), h("input", { type: "date", className: "axis-input", value: f.fecha, onChange: set("fecha") })),
-          h("label", { style: lbl }, "Cliente", h("input", { className: "axis-input", list: "caja-clientes", value: f.cliente_nombre, onChange: set("cliente_nombre"), placeholder: "Nombre como en AimHarder" })),
-          h("label", { style: lbl }, "Producto / concepto", h("input", { className: "axis-input", list: "caja-conceptos", value: f.concepto, onChange: set("concepto"), placeholder: "Ej. Bono 4 sesiones" })),
-          h("label", { style: lbl }, "Importe (€)", h("input", { className: "axis-input", inputMode: "decimal", value: f.importe, onChange: set("importe"), placeholder: "0,00" })),
-          h("label", { style: lbl }, "Estado", h("select", { className: "axis-input", value: f.estado, onChange: set("estado") }, h("option", { value: "cobrado" }, "Cobrado"), h("option", { value: "pendiente" }, "Pendiente de cobro"))),
-          h("label", { style: lbl }, "Forma de pago", h("select", { className: "axis-input", value: f.forma_pago, onChange: set("forma_pago") }, FORMAS.map(([v, t]) => h("option", { key: v, value: v }, t)))),
-          h("label", { style: lbl }, "Vendedor", h("select", { className: "axis-input", value: f.vendedor, onChange: set("vendedor") }, h("option", { value: "" }, "El de AimHarder"), VENDEDORES.map((v) => h("option", { key: v, value: v }, v)))),
-          h("label", { style: lbl }, "Notas (opcional)", h("input", { className: "axis-input", value: f.notas, onChange: set("notas") }))),
-        h("datalist", { id: "caja-clientes" }, caja.clientes.map((c) => h("option", { key: c.id, value: c.nombre }))),
-        h("datalist", { id: "caja-conceptos" }, conceptos.map((c) => h("option", { key: c, value: c }))),
-        h("label", { style: { ...lbl, display: "flex", gap: 6, alignItems: "center", marginTop: 10 } }, h("input", { type: "checkbox", checked: f.sin_aimharder, onChange: set("sin_aimharder") }), "Este pago no existe en AimHarder (no se empareja)"),
-        h("div", { style: { marginTop: 12, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" } },
-          h("button", { className: "axis-btn primary", onClick: guardar, disabled: !valido || busy }, editId ? "Guardar cambios" : "Registrar pago"),
-          editId && h("button", { className: "axis-btn ghost", onClick: () => { setEditId(null); setF(vacio()); } }, "Cancelar"),
-          msg.t && h("span", { style: { fontSize: 13, color: msg.ok ? GOOD : BAD } }, msg.t))),
       h("section", { style: box },
-        h("div", { style: { display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 10 } },
-          h("div", null, h("div", { style: { fontSize: 12, color: MUTED } }, "Cobrado en la Caja"), h("div", { className: "axis-display", style: { fontSize: 28, fontWeight: 700 } }, eur2(cobrado))),
-          h("div", null, h("div", { style: { fontSize: 12, color: MUTED } }, "Pendiente"), h("div", { className: "axis-display", style: { fontSize: 28, fontWeight: 700, color: pendiente > 0 ? WARN : INK } }, eur2(pendiente))),
-          h("div", null, h("div", { style: { fontSize: 12, color: MUTED } }, "Pagos del mes"), h("div", { className: "axis-display", style: { fontSize: 28, fontWeight: 700 } }, delMes.length))),
-        delMes.length === 0 ? h("p", { style: { fontSize: 13, color: MUTED, margin: 0 } }, "No hay pagos registrados en este mes.") : h("div", null, delMes.map(fila))),
+        h("h2", { className: "axis-display", style: { margin: "0 0 6px", fontSize: 20, textTransform: "uppercase" } }, "Cobros · Caja ↔ AimHarder"),
+        h("p", { style: { margin: "0 0 8px", fontSize: 13, color: MUTED } }, "Los pagos se registran en la Caja y el panel les pone su importe a los pagos de AimHarder (mismo cliente, producto y fecha ±7 días). Aquí solo se revisa. ", enlaceCaja),
+        h("p", { style: { margin: 0, fontSize: 14 } }, h("b", null, delMes.length), " pago(s) de la Caja este mes · ", h("b", { style: { color: GOOD } }, emparejados), " emparejado(s) · ", h("b", { style: { color: sinPareja.length ? WARN : INK } }, sinPareja.length), " sin pareja · ", h("b", { style: { color: ceroMes.length ? WARN : INK } }, ceroMes.length), " de AimHarder a 0 € sin cobro"),
+        msg && h("p", { style: { margin: "8px 0 0", fontSize: 13, color: GOOD } }, msg)),
+      sinPareja.length > 0 && h("section", { style: { ...box, borderColor: WARN } },
+        h("h3", { style: { margin: "0 0 4px", fontSize: 15, color: WARN } }, `Pagos de la Caja sin pareja en AimHarder (${sinPareja.length})`),
+        h("p", { style: { margin: "0 0 8px", fontSize: 12, color: MUTED } }, "Cuentan como ingreso pero no cubren sesiones. Revisa el nombre del cliente, el producto o la fecha, o vincúlalos a mano."),
+        h("div", null, sinPareja.map(fila))),
       ceroMes.length > 0 && h("section", { style: { ...box, borderColor: WARN } },
         h("h3", { style: { margin: "0 0 4px", fontSize: 15, color: WARN } }, `Pagos de AimHarder a 0 € sin cobro en la Caja (${ceroMes.length})`),
-        h("p", { style: { margin: "0 0 8px", fontSize: 12, color: MUTED } }, "Tienen sesiones o bono en AimHarder pero no hay un pago registrado aquí que los empareje: ahora mismo cuentan 0 €. Regístralos con la fecha del pago, o revísalos si son gratuitos."),
-        h("div", null, ceroMes.sort((a, b) => (a.d || "").localeCompare(b.d || "")).map((p) => h("div", { key: p.id, style: { fontSize: 13, padding: "4px 0", borderBottom: `1px solid ${SOFT}` } }, `${p.d} · ${p.cl} · ${p.co}`)))));
+        h("p", { style: { margin: "0 0 8px", fontSize: 12, color: MUTED } }, "Tienen sesiones o bono en AimHarder pero no hay un pago en la Caja que los empareje: ahora mismo cuentan 0 €. Regístralos en la Caja con la fecha del pago, o revísalos si son gratuitos."),
+        h("div", null, ceroMes.map((p) => h("div", { key: p.id, style: { fontSize: 13, padding: "4px 0", borderBottom: `1px solid ${SOFT}` } }, `${p.d} · ${p.cl} · ${p.co}`)))));
   }
 
-  window.CajaAxis = { useCaja, aplicar, CajaTab };
+  window.CajaAxis = { useCaja, aplicar, CajaTab: CobrosTab };
 })();
