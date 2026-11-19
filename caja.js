@@ -168,11 +168,14 @@
       // Crea en la Caja los clientes de AimHarder que aún no existan (sin duplicar).
       async asegurarClientes(nombres) {
         if (!puedeEditar || estado !== "ok") return;
-        const existentes = new Set(clientesRef.current.map((c) => c.nombre_norm));
+        // Mismo cliente aunque cambie el orden del nombre ("García Ana" = "Ana García").
+        const orden = (n) => normName(n).split(" ").filter(Boolean).sort().join(" ");
+        const existentes = new Set(clientesRef.current.map((c) => orden(c.nombre)));
         const nuevos = new Map();
         for (const n of nombres) {
           const nombre = String(n || "").trim(), k = normName(nombre);
-          if (nombre && k && !existentes.has(k) && !nuevos.has(k)) nuevos.set(k, { nombre, nombre_norm: k, origen: "aimharder" });
+          const o = orden(nombre);
+          if (nombre && k && !existentes.has(o) && !nuevos.has(o)) nuevos.set(o, { nombre, nombre_norm: k, origen: "aimharder" });
         }
         if (!nuevos.size) return;
         const filas = [...nuevos.values()];
