@@ -82,6 +82,14 @@
     return { payments, info: { pareja, sinPareja, ceroSinCaja, candidatos: (c) => ah.filter((p) => claveNombre(p.cl) === claveNombre(c.cliente_nombre) && (!usados.has(String(p.id)) || String(c.aimharder_pago_id) === String(p.id))) } };
   }
 
+  // Clave del panel: el identificador del Gist de la URL de sincronización guardada en este dispositivo.
+  function clavePanel() {
+    try {
+      const m = String(JSON.parse(localStorage.getItem("axis-autosync-url") || '""')).match(/gists\/([0-9a-f]{20,40})/i);
+      return m ? m[1] : "";
+    } catch (e) { return ""; }
+  }
+
   /* ---------- conexión: sesión, datos y tiempo real ---------- */
   function useCaja() {
     const [estado, setEstado] = useState(sb ? "cargando" : "error"); // cargando | sin-sesion | sin-acceso | ok | error
@@ -92,6 +100,8 @@
     const [clientes, setClientes] = useState([]);
     const [enVivo, setEnVivo] = useState(false);
     const [desactualizado, setDesactualizado] = useState(true); // true hasta leer de Supabase
+    const [publico, setPublico] = useState(false); // true si se leen los cobros sin sesión (con la clave del panel)
+    const [errorPublico, setErrorPublico] = useState("");
     const clientesRef = useRef([]);
     clientesRef.current = clientes;
 
@@ -152,6 +162,34 @@
       return () => { vivo = false; clearTimeout(temporizador); if (canal) sb.removeChannel(canal); setEnVivo(false); };
     }, [uid, cargar]);
 
+    // Lectura SIN sesión: el panel presenta la clave de su sincronización (el identificador del Gist,
+    // que ya tiene cada dispositivo) y Supabase le devuelve los cobros. Se refresca cada 30 s y al
+    // volver a la pestaña. Con sesión de editor se usa en cambio la lectura completa en tiempo real.
+    useEffect(() => {
+      if (!sb || estado === "ok") return;
+      let vivo = true;
+      const leerPublico = async () => {
+        const clave = clavePanel();
+        if (!clave) { if (vivo) { setPublico(false); setErrorPublico("Falta la URL de sincronización del panel: sin ella no se pueden leer los cobros de la Caja sin iniciar sesión."); } return; }
+        try {
+          const { data, error: e } = await sb.rpc("caja_pagos_panel", { p_clave: clave });
+          if (!vivo) return;
+          if (e) throw e;
+          if (!data || !data.ok) { setPublico(false); setErrorPublico("La Caja no reconoce la clave de este panel (la URL de sincronización). Entra con tu usuario o revisa la URL."); return; }
+          setPagos(data.pagos);
+          setPublico(true); setDesactualizado(false); setErrorPublico("");
+          try { localStorage.setItem(CACHE_KEY, JSON.stringify({ pagos: data.pagos })); } catch (err) { /* sin caché */ }
+        } catch (e) {
+          if (vivo) { setDesactualizado(true); setErrorPublico("No se han podido leer los cobros de la Caja (" + (e.message || e) + "). Se muestran los últimos guardados."); }
+        }
+      };
+      leerPublico();
+      const t = setInterval(leerPublico, 30000);
+      const alVolver = () => { if (document.visibilityState === "visible") leerPublico(); };
+      document.addEventListener("visibilitychange", alVolver);
+      return () => { vivo = false; clearInterval(t); document.removeEventListener("visibilitychange", alVolver); };
+    }, [estado]);
+
     const puedeEditar = rol === "admin" || rol === "editor";
     const api = {
       async entrar(email, clave) {
@@ -186,7 +224,7 @@
         await cargar();
       }
     };
-    return { estado, error, sesion, rol, puedeEditar, pagos, clientes, enVivo, desactualizado, api };
+    return { estado, error, sesion, rol, puedeEditar, pagos, clientes, enVivo, desactualizado, publico, errorPublico, api };
   }
 
   /* ---------- pantalla ---------- */
@@ -216,13 +254,14 @@
   function CobrosTab({ caja, info, month, setMonth }) {
     const [msg, setMsg] = useState("");
     const [busy, setBusy] = useState(false);
-    if (caja.estado === "cargando") return h("div", { style: { padding: "18px 22px" } }, h("p", { style: { color: MUTED, fontSize: 13 } }, "Conectando con la Caja…"));
-    if (caja.estado === "sin-sesion" || caja.estado === "error" && !caja.sesion) {
+    // Sin sesión el panel lee los cobros con su clave (modo lectura): solo si eso falla se pide entrar.
+    if (caja.estado === "cargando" && !caja.publico) return h("div", { style: { padding: "18px 22px" } }, h("p", { style: { color: MUTED, fontSize: 13 } }, "Conectando con la Caja…"));
+    if ((caja.estado === "sin-sesion" || caja.estado === "error" && !caja.sesion) && !caja.publico) {
       return h("div", { style: { padding: "0 22px 30px" } }, h("section", { style: box },
         h("h2", { className: "axis-display", style: { margin: "0 0 6px", fontSize: 20, textTransform: "uppercase" } }, "Cobros · Caja de Axis"),
-        h("p", { style: { margin: "0 0 12px", fontSize: 13, color: MUTED } }, "Entra con tu usuario de la Caja para que el panel use el importe real de los pagos (en AimHarder van a 0 €). Los pagos se registran en la Caja: ", enlaceCaja),
-        caja.error && h("p", { style: { fontSize: 13, color: BAD } }, caja.error),
-        caja.estado === "sin-sesion" && h(Login, { caja })));
+        h("p", { style: { margin: "0 0 12px", fontSize: 13, color: MUTED } }, "El panel no ha podido leer los cobros de la Caja (en AimHarder van a 0 €), así que ahora mismo esos pagos cuentan 0 €. Los pagos se registran en la Caja: ", enlaceCaja),
+        (caja.errorPublico || caja.error) && h("p", { style: { fontSize: 13, color: BAD } }, caja.errorPublico || caja.error),
+        caja.estado === "sin-sesion" && h("details", null, h("summary", { style: { cursor: "pointer", fontSize: 13 } }, "Entrar con mi usuario de la Caja"), h("div", { style: { marginTop: 10 } }, h(Login, { caja })))));
     }
     if (caja.estado === "sin-acceso") {
       return h("div", { style: { padding: "0 22px 30px" } }, h("section", { style: box },
@@ -250,9 +289,10 @@
         h("input", { type: "month", className: "axis-input", style: { width: 160 }, value: month, onChange: (e) => e.target.value && setMonth(e.target.value) }),
         h("button", { className: "axis-btn ghost", onClick: () => setMonth(shiftMonth(month, 1)), "aria-label": "Mes siguiente" }, "→"),
         h("span", { style: { marginLeft: "auto", fontSize: 12, color: caja.desactualizado ? WARN : MUTED } },
-          caja.desactualizado ? "⚠ Sin conexión con la Caja: datos guardados · " : caja.enVivo ? "● En tiempo real · " : "Conectando… · ",
-          caja.sesion.user.email, ` (${caja.rol}) `, h("button", { className: "axis-btn ghost", style: { padding: "2px 8px", marginLeft: 6 }, onClick: () => caja.api.salir() }, "Salir"))),
-      caja.error && h("p", { style: { margin: 0, fontSize: 13, color: BAD } }, caja.error),
+          caja.desactualizado ? "⚠ Sin conexión con la Caja: datos guardados · " : caja.sesion ? (caja.enVivo ? "● En tiempo real · " : "Conectando… · ") : "● Se actualiza cada 30 s · ",
+          caja.sesion ? [caja.sesion.user.email, ` (${caja.rol}) `, h("button", { key: "s", className: "axis-btn ghost", style: { padding: "2px 8px", marginLeft: 6 }, onClick: () => caja.api.salir() }, "Salir")] : "solo lectura")),
+      (caja.error || caja.errorPublico) && h("p", { style: { margin: 0, fontSize: 13, color: BAD } }, caja.sesion ? caja.error : caja.errorPublico || caja.error),
+      !caja.sesion && caja.estado === "sin-sesion" && h("details", { style: { fontSize: 13 } }, h("summary", { style: { cursor: "pointer", color: MUTED } }, "Entrar con mi usuario (para vincular a mano)"), h("div", { style: { marginTop: 10 } }, h(Login, { caja }))),
       h("section", { style: box },
         h("h2", { className: "axis-display", style: { margin: "0 0 6px", fontSize: 20, textTransform: "uppercase" } }, "Cobros · Caja ↔ AimHarder"),
         h("p", { style: { margin: "0 0 8px", fontSize: 13, color: MUTED } }, "Los pagos se registran en la Caja y el panel les pone su importe a los pagos de AimHarder (mismo cliente, producto y fecha ±7 días). Aquí solo se revisa. ", enlaceCaja),
