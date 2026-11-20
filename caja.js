@@ -1,10 +1,14 @@
 /* Conexión del panel con la Caja de Axis (aplicación independiente, otra URL).
  *
- * La Caja (Supabase) es donde se registran los pagos de productos con su importe
- * real; el panel solo los LEE y se los pone a los pagos de AimHarder (que van a
- * 0 €): cada pago de la Caja se empareja con el de AimHarder del mismo cliente y
- * producto con la fecha más cercana (±7 días). Aquí solo se revisa ese emparejado.
- * Lo que no tenga pareja en AimHarder cuenta como ingreso, pero no cubre sesiones.
+ * La Caja (Supabase) es donde se registran los cobros en efectivo: ya NO se apuntan en
+ * AimHarder. Cada cobro lleva el importe real y las sesiones que incluye su tarifa por
+ * servicio (p. ej. 4 de fisioterapia), y el panel los trata como un pago más:
+ *   - suma el importe a los cobros, y
+ *   - genera el bono del cliente (las sesiones), que se va gastando con las sesiones
+ *     que AimHarder trae, igual que los bonos de los pagos de AimHarder.
+ * Los cobros antiguos que siguen en AimHarder (enlazados por su id) conservan ese pago
+ * y solo toman de la Caja el importe, la fecha y el vendedor. Un cobro sin sesiones
+ * (p. ej. cuotas del Axis Club) cuenta como ingreso pero no genera bono.
  *
  * Se carga ANTES de panel.js (que lo usa al pintar). Usa funciones de panel.js
  * (normName, productOf, catFromConcept, creatorId, todayISO) solo al ejecutarse.
@@ -57,7 +61,8 @@
       const cli = claveNombre(c.cliente_nombre), prod = claveProducto(c.concepto);
       let mejor = null, mejorD = Infinity;
       for (const p of ah) {
-        if (usados.has(String(p.id)) || claveNombre(p.cl) !== cli || claveProducto(p.co) !== prod) continue;
+        // Solo los cobros en efectivo de AimHarder (los que se apuntaban a 0 €): un pago con tarjeta o transferencia nunca es de la Caja.
+        if (p.met !== "efectivo" || usados.has(String(p.id)) || claveNombre(p.cl) !== cli || claveProducto(p.co) !== prod) continue;
         const d = Math.min(diasEntre(p.d, c.fecha), p.em ? diasEntre(p.em, c.fecha) : Infinity);
         if (d <= TOLERANCIA_DIAS && d < mejorD) { mejor = p; mejorD = d; }
       }
@@ -73,10 +78,11 @@
     const sinPareja = [];
     for (const c of lista) {
       if (pareja.has(c.id)) continue;
-      if (!c.sin_aimharder) sinPareja.push(c);
+      sinPareja.push(c);
       const cobrado = c.estado === "cobrado", v = c.vendedor || "Axis";
-      // ext: true => no cubre sesiones de AimHarder (el panel ya lo respeta).
-      payments.push({ id: "caja-" + c.id, cl: c.cliente_nombre, cat: catFromConcept(c.concepto), amt: c.importe_cents / 100, c: creatorId(v), cr: v, co: c.concepto, d: c.fecha, st: cobrado ? "fin" : "pen", met: cobrado ? c.forma_pago : "", em: c.fecha, ext: true, caja: c.id, nt: c.notas || "" });
+      // Cobro solo de la Caja: con sesiones genera bono (servicios); sin sesiones es solo ingreso (ext).
+      const servicios = Array.isArray(c.servicios) ? c.servicios.filter((l) => l && l.fam && Number(l.n) > 0) : [];
+      payments.push({ id: "caja-" + c.id, cl: c.cliente_nombre, cat: catFromConcept(c.concepto), amt: c.importe_cents / 100, c: creatorId(v), cr: v, co: c.concepto, d: c.fecha, st: cobrado ? "fin" : "pen", met: cobrado ? c.forma_pago : "", em: c.fecha, caja: c.id, soloCaja: true, nt: c.notas || "", ...servicios.length ? { servicios } : { ext: true } });
     }
     const ceroSinCaja = ah.filter((p) => !usados.has(String(p.id)) && !(p.amt > 0));
     return { payments, info: { pareja, sinPareja, ceroSinCaja, candidatos: (c) => ah.filter((p) => claveNombre(p.cl) === claveNombre(c.cliente_nombre) && (!usados.has(String(p.id)) || String(c.aimharder_pago_id) === String(p.id))) } };
@@ -250,16 +256,16 @@
 
   const enlaceCaja = h("a", { href: URL_CAJA, target: "_blank", rel: "noopener", style: { color: "#2563EB", fontSize: 13 } }, "Abrir la Caja ↗");
 
-  // Pestaña «Cobros»: revisión del emparejado entre la Caja y AimHarder.
-  function CobrosTab({ caja, info, month, setMonth }) {
-    const [msg, setMsg] = useState("");
-    const [busy, setBusy] = useState(false);
-    // Sin sesión el panel lee los cobros con su clave (modo lectura): solo si eso falla se pide entrar.
+  const FAM_CORTA = { "Entrenamiento personal": "EP", "Fisioterapia": "Fisio", "Nutrición": "Nutri", "Performance Group": "PG", "Valoración inicial": "Valoración", "Online": "Online", "Viaje": "Viaje" };
+
+  // Pestaña «Cobros»: los cobros de la Caja, sus bonos y qué sesiones quedan por usar.
+  function CobrosTab({ caja, info, month, setMonth, creditos }) {
     if (caja.estado === "cargando" && !caja.publico) return h("div", { style: { padding: "18px 22px" } }, h("p", { style: { color: MUTED, fontSize: 13 } }, "Conectando con la Caja…"));
+    // Sin sesión el panel lee los cobros con su clave (modo lectura): solo si eso falla se pide entrar.
     if ((caja.estado === "sin-sesion" || caja.estado === "error" && !caja.sesion) && !caja.publico) {
       return h("div", { style: { padding: "0 22px 30px" } }, h("section", { style: box },
         h("h2", { className: "axis-display", style: { margin: "0 0 6px", fontSize: 20, textTransform: "uppercase" } }, "Cobros · Caja de Axis"),
-        h("p", { style: { margin: "0 0 12px", fontSize: 13, color: MUTED } }, "El panel no ha podido leer los cobros de la Caja (en AimHarder van a 0 €), así que ahora mismo esos pagos cuentan 0 €. Los pagos se registran en la Caja: ", enlaceCaja),
+        h("p", { style: { margin: "0 0 12px", fontSize: 13, color: MUTED } }, "El panel no ha podido leer los cobros de la Caja, así que ahora mismo no cuenta los cobros en efectivo ni sus bonos. Los cobros se registran en la Caja: ", enlaceCaja),
         (caja.errorPublico || caja.error) && h("p", { style: { fontSize: 13, color: BAD } }, caja.errorPublico || caja.error),
         caja.estado === "sin-sesion" && h("details", null, h("summary", { style: { cursor: "pointer", fontSize: 13 } }, "Entrar con mi usuario de la Caja"), h("div", { style: { marginTop: 10 } }, h(Login, { caja })))));
     }
@@ -268,21 +274,25 @@
         h("p", { style: { margin: "0 0 10px", fontSize: 14 } }, `Has entrado como ${caja.sesion.user.email}, pero ese usuario no tiene acceso a la Caja. Pide que te añadan.`),
         h("button", { className: "axis-btn ghost", onClick: () => caja.api.salir() }, "Salir")));
     }
-    const delMes = caja.pagos.filter((c) => (c.fecha || "").startsWith(month));
-    const sinPareja = info.sinPareja.filter((c) => (c.fecha || "").startsWith(month));
-    const ceroMes = info.ceroSinCaja.filter((p) => (p.d || "").startsWith(month)).sort((a, b) => (a.d || "").localeCompare(b.d || ""));
-    const emparejados = delMes.filter((c) => info.pareja.has(c.id)).length;
-    const vincular = async (c, v) => {
-      setBusy(true); setMsg("Guardando…");
-      try { await caja.api.vincular(c.id, v && v !== "__ninguno" ? v : null, v === "__ninguno"); setMsg("Vínculo actualizado."); } catch (e) { setMsg("No se ha guardado: " + (e.message || e)); } finally { setBusy(false); }
+    const delMes = caja.pagos.filter((c) => (c.fecha || "").startsWith(month)).sort((a, b) => b.fecha.localeCompare(a.fecha));
+    const idPanel = (c) => (info.pareja.has(c.id) ? String(info.pareja.get(c.id).id) : "caja-" + c.id);
+    const bonosDe = (c) => (creditos || []).filter((k) => String(k.id) === idPanel(c) && Number.isFinite(k.total));
+    const total = delMes.reduce((a, c) => a + c.importe_cents, 0) / 100;
+    const conBono = delMes.filter((c) => bonosDe(c).length).length;
+    const enlazados = delMes.filter((c) => info.pareja.has(c.id)).length;
+    const sinUsar = delMes.reduce((a, c) => a + bonosDe(c).reduce((x, k) => x + k.left, 0), 0);
+    const fila = (c) => {
+      const bonos = bonosDe(c);
+      const enlazado = info.pareja.has(c.id);
+      return h("div", { key: c.id, style: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 13, padding: "8px 0", borderBottom: `1px solid ${SOFT}` } },
+        h("span", { style: { color: MUTED, minWidth: 78 } }, c.fecha),
+        h("b", { style: { flex: "1 1 180px" } }, c.concepto, c.cliente_nombre ? ` · ${c.cliente_nombre}` : ""),
+        c.vendedor && h("span", { style: { color: MUTED } }, c.vendedor),
+        h("b", null, eur2(c.importe_cents / 100)),
+        bonos.length ? h("span", { style: { fontSize: 12 } }, bonos.map((k, i) => h("span", { key: i, style: { marginLeft: i ? 8 : 0, color: k.left > 0 ? WARN : GOOD, fontWeight: 600 }, title: k.left > 0 ? "Sesiones sin usar" : "Bono completado" }, `${FAM_CORTA[k.fam] || k.fam} ${k.total - k.left}/${k.total}`, k.left > 0 ? ` (quedan ${k.left})` : " ✓")))
+          : h("span", { style: { fontSize: 12, color: MUTED } }, Array.isArray(c.servicios) && c.servicios.length ? "sin bono" : "sin sesiones (solo ingreso)"),
+        enlazado && h("span", { style: { fontSize: 11, color: MUTED }, title: "Este cobro sigue en AimHarder: el bono sale de ese pago" }, "· en AimHarder"));
     };
-    const fila = (c) => h("div", { key: c.id, style: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 13, padding: "8px 0", borderBottom: `1px solid ${SOFT}` } },
-      h("span", { style: { color: MUTED, minWidth: 78 } }, c.fecha),
-      h("b", { style: { flex: "1 1 180px" } }, c.concepto, c.cliente_nombre ? ` · ${c.cliente_nombre}` : ""),
-      h("b", null, eur2(c.importe_cents / 100)),
-      caja.puedeEditar && h("select", { className: "axis-input", style: { width: 230 }, value: "", disabled: busy, "aria-label": "Vincular con un pago de AimHarder", onChange: (e) => vincular(c, e.target.value) },
-        h("option", { value: "" }, "Vincular con un pago de AimHarder…"), h("option", { value: "__ninguno" }, "No existe en AimHarder"),
-        info.candidatos(c).map((p) => h("option", { key: p.id, value: String(p.id) }, `${p.d} · ${p.co} · AH ${eur2(p.amt)}`))));
     return h("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18 } },
       h("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 14 } },
         h("button", { className: "axis-btn ghost", onClick: () => setMonth(shiftMonth(month, -1)), "aria-label": "Mes anterior" }, "←"),
@@ -292,20 +302,11 @@
           caja.desactualizado ? "⚠ Sin conexión con la Caja: datos guardados · " : caja.sesion ? (caja.enVivo ? "● En tiempo real · " : "Conectando… · ") : "● Se actualiza cada 30 s · ",
           caja.sesion ? [caja.sesion.user.email, ` (${caja.rol}) `, h("button", { key: "s", className: "axis-btn ghost", style: { padding: "2px 8px", marginLeft: 6 }, onClick: () => caja.api.salir() }, "Salir")] : "solo lectura")),
       (caja.error || caja.errorPublico) && h("p", { style: { margin: 0, fontSize: 13, color: BAD } }, caja.sesion ? caja.error : caja.errorPublico || caja.error),
-      !caja.sesion && caja.estado === "sin-sesion" && h("details", { style: { fontSize: 13 } }, h("summary", { style: { cursor: "pointer", color: MUTED } }, "Entrar con mi usuario (para vincular a mano)"), h("div", { style: { marginTop: 10 } }, h(Login, { caja }))),
       h("section", { style: box },
-        h("h2", { className: "axis-display", style: { margin: "0 0 6px", fontSize: 20, textTransform: "uppercase" } }, "Cobros · Caja ↔ AimHarder"),
-        h("p", { style: { margin: "0 0 8px", fontSize: 13, color: MUTED } }, "Los pagos se registran en la Caja y el panel les pone su importe a los pagos de AimHarder (mismo cliente, producto y fecha ±7 días). Aquí solo se revisa. ", enlaceCaja),
-        h("p", { style: { margin: 0, fontSize: 14 } }, h("b", null, delMes.length), " pago(s) de la Caja este mes · ", h("b", { style: { color: GOOD } }, emparejados), " emparejado(s) · ", h("b", { style: { color: sinPareja.length ? WARN : INK } }, sinPareja.length), " sin pareja · ", h("b", { style: { color: ceroMes.length ? WARN : INK } }, ceroMes.length), " de AimHarder a 0 € sin cobro"),
-        msg && h("p", { style: { margin: "8px 0 0", fontSize: 13, color: GOOD } }, msg)),
-      sinPareja.length > 0 && h("section", { style: { ...box, borderColor: WARN } },
-        h("h3", { style: { margin: "0 0 4px", fontSize: 15, color: WARN } }, `Pagos de la Caja sin pareja en AimHarder (${sinPareja.length})`),
-        h("p", { style: { margin: "0 0 8px", fontSize: 12, color: MUTED } }, "Cuentan como ingreso pero no cubren sesiones. Revisa el nombre del cliente, el producto o la fecha, o vincúlalos a mano."),
-        h("div", null, sinPareja.map(fila))),
-      ceroMes.length > 0 && h("section", { style: { ...box, borderColor: WARN } },
-        h("h3", { style: { margin: "0 0 4px", fontSize: 15, color: WARN } }, `Pagos de AimHarder a 0 € sin cobro en la Caja (${ceroMes.length})`),
-        h("p", { style: { margin: "0 0 8px", fontSize: 12, color: MUTED } }, "Tienen sesiones o bono en AimHarder pero no hay un pago en la Caja que los empareje: ahora mismo cuentan 0 €. Regístralos en la Caja con la fecha del pago, o revísalos si son gratuitos."),
-        h("div", null, ceroMes.map((p) => h("div", { key: p.id, style: { fontSize: 13, padding: "4px 0", borderBottom: `1px solid ${SOFT}` } }, `${p.d} · ${p.cl} · ${p.co}`)))));
+        h("h2", { className: "axis-display", style: { margin: "0 0 6px", fontSize: 20, textTransform: "uppercase" } }, "Cobros en efectivo · Caja de Axis"),
+        h("p", { style: { margin: "0 0 8px", fontSize: 13, color: MUTED } }, "Los cobros en efectivo se registran solo en la Caja (no en AimHarder): suman su importe y, según la tarifa, generan el bono del cliente. El panel va gastando esas sesiones con las que trae AimHarder. ", enlaceCaja),
+        h("p", { style: { margin: 0, fontSize: 14 } }, h("b", null, delMes.length), " cobro(s) este mes · ", h("b", null, eur2(total)), " · ", h("b", { style: { color: GOOD } }, conBono), " con bono · ", h("b", { style: { color: sinUsar ? WARN : INK } }, sinUsar), " sesión(es) de esos bonos sin usar", enlazados ? ` · ${enlazados} sigue(n) en AimHarder` : "")),
+      h("section", { style: box }, delMes.length === 0 ? h("p", { style: { fontSize: 13, color: MUTED, margin: 0 } }, "No hay cobros de la Caja en este mes.") : h("div", null, delMes.map(fila))));
   }
 
   window.CajaAxis = { useCaja, aplicar, CajaTab: CobrosTab };

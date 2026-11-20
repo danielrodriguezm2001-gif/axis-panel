@@ -893,6 +893,24 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
     let pr = productOf(p.co, p.cat);
     const fam = creditFamily(pr);
     const key = normName(p.cl);
+    // Cobro de la Caja con sesiones por servicio definidas en su tarifa: genera un bono por línea.
+    // El importe se reparte por sesión entre las líneas sin valor fijo (p. ej. iniciación:
+    // valoración a 100 € fijos y el resto entre las 3 sesiones de EP).
+    if (Array.isArray(p.servicios)) {
+      const lineas = p.servicios.filter((l) => l && l.fam && Number(l.n) > 0);
+      if (!lineas.length || !(p.amt > 0) || !key) continue;
+      const fijo = lineas.reduce((a, l) => a + (Number(l.valor) > 0 ? Number(l.valor) : 0), 0);
+      const libres = lineas.filter((l) => !(Number(l.valor) > 0)).reduce((a, l) => a + Number(l.n), 0);
+      const unitLibre = libres ? Math.max(0, p.amt - fijo) / libres : 0;
+      const vend = personKeyOfPayment(p) === "axis" ? null : personKeyOfPayment(p);
+      const lista = credits.get(key) || [];
+      for (const l of lineas) {
+        const n = Number(l.n);
+        lista.push({ id: p.id, d: p.d || "", e: p.em || p.d || "", fam: l.fam, generic: !!l.generico && l.fam === "Entrenamiento personal", left: n, mes: null, uno: n === 1, unit: Number(l.valor) > 0 ? Number(l.valor) / n : unitLibre, origen: origenLabel({ nombre: p.co, sesiones: n }, l.fam), seller: vend, st: p.st });
+      }
+      credits.set(key, lista);
+      continue;
+    }
     if (pr.iniciacion && key && p.amt > 0) {
       const { ep, ass } = pr.iniciacion;
       const seller = personKeyOfPayment(p) === "axis" ? null : personKeyOfPayment(p);
@@ -1482,7 +1500,7 @@ function GestionTab({ payments, sessions, coaches, nowMin }) {
     { t: "Sesiones 1 a 1 sin cliente apuntado", como: "Apunta al cliente en la sesión o bórrala si no se dio.", items: delMes.filter((r) => r.client === "(sin cliente)").map(fila), mes: true },
     { t: "Fisioterapia impartida por alguien que no es fisio", como: "Si la dio el fisio, cambia el entrenador en AimHarder; si no, se le paga a quien figura.", items: delMes.filter((r) => r.tipo === "Fisioterapia" && !["erik", "marti"].includes(r.coach)).map(fila), mes: true },
     { t: "Sesiones sin entrenador reconocido", como: "Asigna el entrenador en AimHarder: ahora nadie cobra esa sesión.", items: delMes.filter((r) => r.coach === "__none__").map(fila), mes: true },
-    { t: "Conceptos de venta que el panel no reconoce", como: "No se usan para cubrir sesiones. Si incluyen sesiones, dilo en el concepto (p. ej. «Bono 4 sesiones»).", items: payments.filter((p) => (p.d || "").startsWith(month) && p.amt > 0 && !p.ext && productOf(p.co, p.cat).familia === "Otros").map(pago), mes: true },
+    { t: "Conceptos de venta que el panel no reconoce", como: "No se usan para cubrir sesiones. Si incluyen sesiones, dilo en el concepto (p. ej. «Bono 4 sesiones»).", items: payments.filter((p) => (p.d || "").startsWith(month) && p.amt > 0 && !p.ext && !Array.isArray(p.servicios) && productOf(p.co, p.cat).familia === "Otros").map(pago), mes: true },
     { t: "Pagos pendientes desde hace más de 30 días", como: "Reclama el cobro o anúlalo si ya no procede.", items: vencidos.filter((p) => dias(p.d) > 30).sort((a, b) => a.d.localeCompare(b.d)).map((p) => `${pago(p)} · hace ${dias(p.d)} días`) },
     { t: "Pagos pendientes de 0 €", como: "No suman dinero, pero dejan sus sesiones como pendientes de cobro. Márcalos como cobrados o bórralos.", items: payments.filter((p) => p.st === "pen" && !(p.amt > 0)).map(pago) },
     { t: "Pagos agrupados (varias sesiones en un solo pago)", como: "AimHarder corta el concepto y se pierde el precio de cada sesión: el panel reparte el importe a partes iguales. Mejor no agrupar.", items: payments.filter((p) => / \+ /.test(p.co || "") && !stripAccents(p.co || "").includes("iniciacion")).map(pago) }
@@ -1627,6 +1645,14 @@ function AxisPanel() {
   const caja = CajaAxis.useCaja();
   const cajaAplicada = useMemo(() => CajaAxis.aplicar(paymentsRaw, caja.pagos), [paymentsRaw, caja.pagos]);
   const payments = cajaAplicada.payments;
+  // Bonos (sesiones) de todos los pagos: la pestaña «Cobros» muestra cuáles quedan por usar.
+  const creditosCaja = useMemo(() => {
+    try {
+      return buildSessionLedger(payments, sessions, coaches, todayISO(), nowMin).creditos || [];
+    } catch (e) {
+      return [];
+    }
+  }, [payments, sessions, coaches, nowMin]);
   const [payFilter, setPayFilter] = useState("fin");
   const [autoSyncUrl, setAutoSyncUrl] = useState("");
   const [autoSyncState, setAutoSyncState] = useState({ status: "idle", msg: "" });
@@ -2163,7 +2189,7 @@ function AxisPanel() {
       var _a, _b;
       return /* @__PURE__ */ React.createElement("td", { key: c, style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, textAlign: "right", fontWeight: 700 } }, eur(((_a = payStats.totals[c]) == null ? void 0 : _a.amt) || 0), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#5A6B63" } }, "(", ((_b = payStats.totals[c]) == null ? void 0 : _b.n) || 0, ")"));
     }), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, textAlign: "right", fontWeight: 800 } }, eur(payStats.grand), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#5A6B63" } }, "(", payStats.n, ")"))))), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: "#5A6B63", marginBottom: 0 } }, '"Creado por" indica qui\xE9n registr\xF3 el cobro, no necesariamente qui\xE9n dio la sesi\xF3n. La columna "Axis" re\xFAne los pagos creados con la cuenta del centro (Axis Health & Performance) o por el administrador: son ingresos del centro y no se suman a Marc, igual que en el Excel del plan financiero.')));
-  })(), tab === "stats" && /* @__PURE__ */ React.createElement(PagosExternosCard, { payments: paymentsRaw, setPayments, syncKey, serverUrl: SYNC_SERVER_URL, month }), tab === "caja" && /* @__PURE__ */ React.createElement(CajaAxis.CajaTab, { caja, info: cajaAplicada.info, month, setMonth }), tab === "objetivos" && /* @__PURE__ */ React.createElement(ObjetivosTab, { payments, coaches }), tab === "personas" && /* @__PURE__ */ React.createElement(PersonasTab, { payments, sessions, coaches, nowMin }), tab === "gestion" && /* @__PURE__ */ React.createElement(GestionTab, { payments, sessions, coaches, nowMin }), tab === "equipo" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18, maxWidth: 760 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Equipo"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 12px", fontSize: 13, color: "#5A6B63" } }, "El email es el que se a\xF1adir\xE1 como invitado dentro del archivo .ics. Sin email, el evento se genera igualmente pero sin invitado."), coaches.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: c.id, className: "team-row" }, /* @__PURE__ */ React.createElement(
+  })(), tab === "stats" && /* @__PURE__ */ React.createElement(PagosExternosCard, { payments: paymentsRaw, setPayments, syncKey, serverUrl: SYNC_SERVER_URL, month }), tab === "caja" && /* @__PURE__ */ React.createElement(CajaAxis.CajaTab, { caja, info: cajaAplicada.info, month, setMonth, creditos: creditosCaja }), tab === "objetivos" && /* @__PURE__ */ React.createElement(ObjetivosTab, { payments, coaches }), tab === "personas" && /* @__PURE__ */ React.createElement(PersonasTab, { payments, sessions, coaches, nowMin }), tab === "gestion" && /* @__PURE__ */ React.createElement(GestionTab, { payments, sessions, coaches, nowMin }), tab === "equipo" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18, maxWidth: 760 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Equipo"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 12px", fontSize: 13, color: "#5A6B63" } }, "El email es el que se a\xF1adir\xE1 como invitado dentro del archivo .ics. Sin email, el evento se genera igualmente pero sin invitado."), coaches.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: c.id, className: "team-row" }, /* @__PURE__ */ React.createElement(
     "input",
     {
       type: "color",
