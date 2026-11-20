@@ -107,6 +107,7 @@ function catFromConcept(concept) {
   if (t.includes("bono 8")) return "Pack 8";
   if (t.includes("grupo")) return "Small group / Grupo reducido";
   if (t.includes("valoraci")) return "Valoraci\xF3n inicial";
+  if (t.includes("viaje")) return "Viaje";
   if (t.includes("online")) return "Online";
   if (t.includes("individual")) return "Sesi\xF3n individual";
   return concept.replace(/\s*\d{1,2}\/\d{4}\s*$/, "").trim() || "Sin concepto";
@@ -494,7 +495,7 @@ function sortPeople(keys) {
   const rank = (k) => k === "axis" ? 900 : k === "__none__" ? 999 : PERSON_ORDER.indexOf(k) >= 0 ? PERSON_ORDER.indexOf(k) : 500;
   return [...keys].sort((a, b) => rank(a) - rank(b) || String(a).localeCompare(String(b)));
 }
-const FAMILIAS = ["Valoración", "Entrenamiento personal", "Fisioterapia", "Nutrición", "Psicología", "Grupos", "Online", "Otros"];
+const FAMILIAS = ["Valoración", "Entrenamiento personal", "Fisioterapia", "Nutrición", "Psicología", "Grupos", "Online", "Viaje", "Otros"];
 function areaOf(t) {
   if (t.includes("fisio")) return "Fisioterapia";
   if (t.includes("nutri")) return "Nutrición";
@@ -543,6 +544,8 @@ function productOf(conceptRaw, fallbackCat) {
     const etiqueta = area ? ` · ${area}` : " · sin especificar";
     return { familia: fam, nombre: `Bono ${n || "?"} sesiones${etiqueta}`, sesiones: n };
   }
+  // Viaje: servicio único de una sesión de EP o de fisio, siempre con IVA.
+  if (t.includes("viaje")) return { familia: "Viaje", nombre: "Viaje", sesiones: 1 };
   if (t.includes("online")) return { familia: "Online", nombre: "Sesión online", sesiones: 1 };
   if (t.includes("individual") || t.includes("sesion")) {
     const fam = area || "Entrenamiento personal";
@@ -809,13 +812,14 @@ function creditFamily(pr) {
   if (pr.familia === "Nutrición") return "Nutrición";
   // Sesión online: en el calendario se apunta como entrenamiento personal.
   if (pr.familia === "Online") return "Online";
+  if (pr.familia === "Viaje") return "Viaje";
   return null;
 }
 const PRECIO_ASS_INICIACION = 100;
 const PRECIO_SESION_PG = 45;
 const PREFS_CREDITO = {
-  "Fisioterapia": [(c) => c.fam === "Fisioterapia", (c) => c.generic],
-  "Entrenamiento personal": [(c) => c.fam === "Entrenamiento personal", (c) => c.fam === "Online"],
+  "Fisioterapia": [(c) => c.fam === "Fisioterapia", (c) => c.generic, (c) => c.fam === "Viaje"],
+  "Entrenamiento personal": [(c) => c.fam === "Entrenamiento personal", (c) => c.fam === "Online", (c) => c.fam === "Viaje"],
   "Performance Group": [(c) => c.fam === "Performance Group"],
   "Valoración inicial": [(c) => c.fam === "Valoración inicial"],
   "Nutrición": [(c) => c.fam === "Nutrición"]
@@ -823,6 +827,7 @@ const PREFS_CREDITO = {
 function origenLabel(pr, fam) {
   if (fam === "Nutrición") return pr.nombre;
   if (fam === "Online") return "Sesión online";
+  if (fam === "Viaje") return "Viaje";
   if (fam === "Performance Group" || fam === "Valoración inicial") return pr.sesiones === 1 ? fam : `${fam} · ${String(pr.sesiones).replace(".", ",")} sesiones`;
   const n = pr.sesiones;
   const base = n === 1 ? "Sesión suelta" : `Bono ${String(n).replace(".", ",")} sesiones`;
@@ -954,7 +959,7 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
         cr.left -= 1;
         if (cr.agrupado) cr.n += 1;
         if (!cr.ultimo || s.date > cr.ultimo) cr.ultimo = s.date;
-        rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", cobro: cr.st === "fin" ? cr.d : null, sinBono: false, agrupado: cr.agrupado ? cr : null });
+        rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", cobro: cr.st === "fin" ? cr.d : null, sinBono: false, agrupado: cr.agrupado ? cr : null, cfam: cr.fam });
       } else {
         rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: 0, origen: "Sin bono", seller: null, sinBono: true });
       }
@@ -1011,6 +1016,8 @@ function valorPorPersona(rows, prefix) {
 // IVA por tipo de sesión: fisioterapia y nutrición están exentas (0 %); el resto, 21 %.
 // Además, las valoraciones iniciales de Erik (fisioterapeuta) van sin IVA.
 const IVA_0_POR_COACH = { erik: ["Valoración inicial"] };
+// El servicio de viaje siempre lleva IVA, aunque la sesión sea de fisio.
+const IVA_VIAJE = 0.21;
 const ivaDe = (tipo, coach) => tipo === "Fisioterapia" || tipo === "Nutrición" || (IVA_0_POR_COACH[coach] || []).includes(tipo) ? 0 : 0.21;
 const PCT_100 = { "Entrenamiento personal": 1, "Fisioterapia": 1, "Performance Group": 1, "Valoración inicial": 1 };
 const PAGO_COACH = {
@@ -1047,6 +1054,7 @@ const LEYENDA_COMUN = [
   "Valor de una sesión = lo que pagó el cliente por esa sesión de su bono (precio del bono ÷ número de sesiones), sin IVA: 21 %, salvo fisioterapia, nutrición y las valoraciones de Erik (0 %).",
   "Solo cuentan las sesiones ya impartidas, según el entrenador asignado en AimHarder; cada cliente de la sesión gasta una sesión de su bono, por orden de compra.",
   "Cada sesión se paga el mes en que Axis cobra el bono del que sale (o el mes de la sesión, si el bono ya estaba cobrado). Las de bonos pendientes aparecen aparte y se pagan cuando se cobren.",
+  "Viaje: servicio único que cubre una sesión de EP o de fisioterapia; siempre con IVA del 21 %, también si es fisio.",
   "Pack «Iniciación - Mes 1»: asesoramiento (ASS) de 100 € + 3 sesiones de EP a 60 €, según lo que indique su concepto.",
   "Las sesiones sin un bono pagado que las cubra no suman (salen en naranja para revisar el cobro)."
 ];
@@ -1080,7 +1088,7 @@ function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
       key = conOtro ? "val|otro" : "val|solo";
       concepto = conOtro ? "Valoración inicial (con otro entrenador)" : "Valoración inicial (solo)";
     }
-    const base = r.value / (1 + ivaDe(r.tipo, k));
+    const base = r.value / (1 + (r.cfam === "Viaje" ? IVA_VIAJE : ivaDe(r.tipo, k)));
     const pago = base * pct;
     const fila = { date: r.date, start: r.start, tipo: key.startsWith("val|") ? concepto : r.tipo, quien: r.client, origen: r.origen, base, pago, cobro: r.cobro || null, sinBono: r.sinBono };
     if (r.sinBono) {
