@@ -147,6 +147,12 @@
       body.style.display = collapsed ? "grid" : "none";
       toggle.textContent = collapsed ? "▾" : "▸";
     });
+    /* En pantallas estrechas el widget tapa media pantalla: arranca minimizado. */
+    if (window.innerWidth < 700) {
+      body.style.display = "none";
+      toggle.textContent = "▸";
+      box.style.width = "auto";
+    }
     box.appendChild(header);
     box.appendChild(body);
     document.body.appendChild(box);
@@ -358,13 +364,22 @@
     /* Días futuros que cubre el Gist y los ids que contienen */
     var coveredDays = {};
     var liveIds = {};
-    Object.keys(days).forEach(function (d) {
-      if (d >= today) {
-        coveredDays[d] = true;
-        (Array.isArray(days[d]) ? days[d] : []).forEach(function (r) {
-          if (r && r.id !== undefined) liveIds[String(r.id)] = true;
-        });
-      }
+    /* Las clases recurrentes comparten id en AimHarder: el panel (idsUnicos en panel.js) deja
+       el id original a la aparición más antigua y llama "id@fecha" a las demás. Se aplica la
+       misma regla, recorriendo todos los días en orden, y se dan por vivos ambos formatos. */
+    var vistos = {};
+    Object.keys(days).sort().forEach(function (d) {
+      var futuro = d >= today;
+      if (futuro) coveredDays[d] = true;
+      (Array.isArray(days[d]) ? days[d] : []).forEach(function (r) {
+        if (!r || r.id === undefined) return;
+        var id = String(r.id);
+        var repetido = !!vistos[id];
+        vistos[id] = true;
+        if (!futuro) return;
+        liveIds[id] = true;
+        if (repetido) liveIds[id + "@" + d] = true;
+      });
     });
 
     var map = readMap();

@@ -323,7 +323,11 @@ function parseAimHarder(json, fallbackDate, coaches, rooms) {
       end = `${pad(Math.floor(em / 60))}:${pad(em % 60)}`;
     }
     if (!start) continue;
-    if (!end) end = `${pad(Math.floor((toMin(start) + 60) / 60))}:${pad((toMin(start) + 60) % 60)}`;
+    if (!end) {
+      // Sin hora de fin: una hora después, sin pasar de las 23:59 (nunca "24:30").
+      const em = Math.min(toMin(start) + 60, 23 * 60 + 59);
+      end = `${pad(Math.floor(em / 60))}:${pad(em % 60)}`;
+    }
     const coachName = asName(pick(r, ["coachName", "coach", "staff", "trainer", "professional", "employee", "teacher", "instructor", "createdBy", "created_by"]));
     const roomName = asName(pick(r, ["salaname", "room", "trainingRoom", "training_room", "roomName", "space", "location"]));
     const title = asName(pick(r, ["className", "name", "class", "activity", "concept", "title", "type"])) || "Sesi\xF3n";
@@ -390,6 +394,50 @@ function parseAimHarder(json, fallbackDate, coaches, rooms) {
     fusionadas.push(base);
   }
   return fusionadas;
+}
+// Reparto en "carriles" de las sesiones de una misma sala que se solapan en el tiempo: cada grupo
+// de sesiones encadenadas se divide en columnas (carril i de n) para que ninguna tape a otra.
+function carriles(sesiones) {
+  const items = sesiones.map((s) => ({ s, ini: toMin(s.start), fin: Math.max(toMin(s.end), toMin(s.start) + 20) })).sort((a, b) => a.ini - b.ini || a.fin - b.fin);
+  const res = /* @__PURE__ */ new Map();
+  let grupo = [], finGrupo = -1;
+  const cerrar = () => {
+    const finCarril = [];
+    for (const it of grupo) {
+      let l = finCarril.findIndex((f) => f <= it.ini);
+      if (l === -1) {
+        l = finCarril.length;
+        finCarril.push(0);
+      }
+      finCarril[l] = it.fin;
+      it.carril = l;
+    }
+    for (const it of grupo) res.set(it.s.id, { i: it.carril, n: finCarril.length });
+    grupo = [];
+    finGrupo = -1;
+  };
+  for (const it of items) {
+    if (grupo.length && it.ini >= finGrupo) cerrar();
+    grupo.push(it);
+    finGrupo = Math.max(finGrupo, it.fin);
+  }
+  if (grupo.length) cerrar();
+  return res;
+}
+// En AimHarder las clases recurrentes (grupos, series semanales) comparten el MISMO id en todas
+// sus fechas. El panel identifica cada sesión por su id (editar, borrar, enviar al Calendar, ICS,
+// cuentas de bonos…), así que se necesita un id distinto por sesión: la primera aparición
+// (la más antigua) conserva el id de AimHarder y las siguientes pasan a "id@fecha".
+// gcal.js aplica la misma regla; si se cambia aquí hay que cambiarla allí.
+function idsUnicos(sesiones) {
+  const vistos = /* @__PURE__ */ new Set();
+  const orden = sesiones.map((s, i) => [s, i]).sort((a, b) => (a[0].date || "").localeCompare(b[0].date || "") || a[1] - b[1]);
+  for (const [s] of orden) {
+    const id = String(s.id);
+    if (vistos.has(id)) s.id = `${id}@${s.date}`;
+    else vistos.add(id);
+  }
+  return sesiones;
 }
 async function loadKey(key, fallback) {
   try {
@@ -1593,7 +1641,7 @@ function AxisPanel() {
       const roomsAntiguas = Array.isArray(savedRooms) && savedRooms.some((r) => r && LEGACY_ROOM_MAP[r.id]);
       setRooms(roomsAntiguas ? DEFAULT_ROOMS : savedRooms);
       const savedSessions = await loadKey("axis-sessions", []);
-      setSessions(roomsAntiguas ? savedSessions.map((s) => LEGACY_ROOM_MAP[s.roomId] ? { ...s, roomId: LEGACY_ROOM_MAP[s.roomId] } : s) : savedSessions);
+      setSessions(idsUnicos((roomsAntiguas ? savedSessions.map((s) => LEGACY_ROOM_MAP[s.roomId] ? { ...s, roomId: LEGACY_ROOM_MAP[s.roomId] } : s) : savedSessions).map((s) => ({ ...s }))));
       const storedPay = await loadKey("axis-payments", null);
       setPayments(storedPay && storedPay.length ? storedPay : PAYMENTS_SEED);
       setAutoSyncUrl(await loadKey("axis-autosync-url", ""));
@@ -1675,6 +1723,7 @@ function AxisPanel() {
       for (const [d, records] of Object.entries(daysObj)) {
         allRecords = allRecords.concat(parseAimHarder(records, d, coaches, rooms));
       }
+      idsUnicos(allRecords);
       // Sesiones: el panel muestra SOLO lo que hay en AimHarder. Lo que no llega
       // en la sincronización (borrado, cancelado o creado a mano) desaparece.
       // Si no llega ninguna, casi seguro falló la descarga: se conservan las de antes.
@@ -1999,11 +2048,20 @@ function AxisPanel() {
     .axis-btn:disabled { opacity:.45; cursor:not-allowed; }
     input, select, textarea { font-family:'Barlow',sans-serif; }
     .axis-input { border:1px solid #C9D2CD; border-radius:6px; padding:7px 9px; font-size:13px; background:#fff; width:100%; box-sizing:border-box; }
-    .sess-block { position:absolute; left:4px; right:4px; border-radius:8px; padding:6px 8px; color:#fff; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.18); cursor:pointer; transition:transform .08s; }
+    .team-row { display:grid; grid-template-columns:36px 110px 150px 1fr auto; gap:8px; align-items:center; margin-bottom:8px; }
+    @media (max-width: 700px) {
+      .team-row { grid-template-columns:36px minmax(0,1fr) auto; }
+      .team-row > :nth-child(3), .team-row > :nth-child(4) { grid-column:2 / 4; min-width:0; }
+      .team-row > :nth-child(5) { grid-column:3; grid-row:1; }
+    }
+    .sess-block { position:absolute; box-sizing:border-box; left:4px; right:4px; border-radius:8px; padding:6px 8px; color:#fff; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.18); cursor:pointer; transition:transform .08s; }
     .sess-block:hover { transform:scale(1.012); }
     @media (prefers-reduced-motion: reduce) { .sess-block { transition:none; } .sess-block:hover { transform:none; } }
   `;
   const totalH = (DAY_END - DAY_START) * 60 * PX_PER_MIN;
+  // Sesiones que coinciden en hora y sala: se reparten lado a lado en vez de taparse.
+  const carrilesDia = /* @__PURE__ */ new Map();
+  for (const r of rooms) for (const [k, v] of carriles(daySessions.filter((s) => s.roomId === r.id))) carrilesDia.set(k, v);
   const hours = [];
   for (let h = DAY_START; h <= DAY_END; h++) hours.push(h);
   const coachName = (s) => {
@@ -2046,7 +2104,7 @@ function AxisPanel() {
         className: "sess-block",
         role: "button",
         tabIndex: 0,
-        style: { top, height: h, background: colorOf(s), opacity: s.sent ? 0.85 : 1 },
+        style: { top, height: h, background: colorOf(s), opacity: s.sent ? 0.85 : 1, ...(carrilesDia.get(s.id) && carrilesDia.get(s.id).n > 1 ? { left: `calc(${(carrilesDia.get(s.id).i / carrilesDia.get(s.id).n * 100).toFixed(3)}% + 3px)`, right: "auto", width: `calc(${(100 / carrilesDia.get(s.id).n).toFixed(3)}% - 6px)` } : {}) },
         title: `${s.title} \xB7 ${coachName(s)} \xB7 ${s.start}\u2013${s.end}${s.client ? " \xB7 " + s.client : ""}`,
         onClick: () => {
           setSelected((p) => ({ ...p, [s.id]: !p[s.id] }));
@@ -2105,7 +2163,7 @@ function AxisPanel() {
       var _a, _b;
       return /* @__PURE__ */ React.createElement("td", { key: c, style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, textAlign: "right", fontWeight: 700 } }, eur(((_a = payStats.totals[c]) == null ? void 0 : _a.amt) || 0), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#5A6B63" } }, "(", ((_b = payStats.totals[c]) == null ? void 0 : _b.n) || 0, ")"));
     }), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, textAlign: "right", fontWeight: 800 } }, eur(payStats.grand), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#5A6B63" } }, "(", payStats.n, ")"))))), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: "#5A6B63", marginBottom: 0 } }, '"Creado por" indica qui\xE9n registr\xF3 el cobro, no necesariamente qui\xE9n dio la sesi\xF3n. La columna "Axis" re\xFAne los pagos creados con la cuenta del centro (Axis Health & Performance) o por el administrador: son ingresos del centro y no se suman a Marc, igual que en el Excel del plan financiero.')));
-  })(), tab === "stats" && /* @__PURE__ */ React.createElement(PagosExternosCard, { payments: paymentsRaw, setPayments, syncKey, serverUrl: SYNC_SERVER_URL, month }), tab === "caja" && /* @__PURE__ */ React.createElement(CajaAxis.CajaTab, { caja, info: cajaAplicada.info, month, setMonth }), tab === "objetivos" && /* @__PURE__ */ React.createElement(ObjetivosTab, { payments, coaches }), tab === "personas" && /* @__PURE__ */ React.createElement(PersonasTab, { payments, sessions, coaches, nowMin }), tab === "gestion" && /* @__PURE__ */ React.createElement(GestionTab, { payments, sessions, coaches, nowMin }), tab === "equipo" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18, maxWidth: 760 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Equipo"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 12px", fontSize: 13, color: "#5A6B63" } }, "El email es el que se a\xF1adir\xE1 como invitado dentro del archivo .ics. Sin email, el evento se genera igualmente pero sin invitado."), coaches.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: c.id, style: { display: "grid", gridTemplateColumns: "36px 110px 150px 1fr auto", gap: 8, alignItems: "center", marginBottom: 8 } }, /* @__PURE__ */ React.createElement(
+  })(), tab === "stats" && /* @__PURE__ */ React.createElement(PagosExternosCard, { payments: paymentsRaw, setPayments, syncKey, serverUrl: SYNC_SERVER_URL, month }), tab === "caja" && /* @__PURE__ */ React.createElement(CajaAxis.CajaTab, { caja, info: cajaAplicada.info, month, setMonth }), tab === "objetivos" && /* @__PURE__ */ React.createElement(ObjetivosTab, { payments, coaches }), tab === "personas" && /* @__PURE__ */ React.createElement(PersonasTab, { payments, sessions, coaches, nowMin }), tab === "gestion" && /* @__PURE__ */ React.createElement(GestionTab, { payments, sessions, coaches, nowMin }), tab === "equipo" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18, maxWidth: 760 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Equipo"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 12px", fontSize: 13, color: "#5A6B63" } }, "El email es el que se a\xF1adir\xE1 como invitado dentro del archivo .ics. Sin email, el evento se genera igualmente pero sin invitado."), coaches.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: c.id, className: "team-row" }, /* @__PURE__ */ React.createElement(
     "input",
     {
       type: "color",
