@@ -1029,7 +1029,7 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
         cr.left -= 1;
         if (cr.agrupado) cr.n += 1;
         if (!cr.ultimo || s.date > cr.ultimo) cr.ultimo = s.date;
-        rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", cobro: cr.st === "fin" ? cr.d : null, sinBono: false, agrupado: cr.agrupado ? cr : null, cfam: cr.fam, cpack: !!cr.pack, cmet: metodoDe.get(String(cr.id)) || "" });
+        rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, cid: String(cr.id), value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", cobro: cr.st === "fin" ? cr.d : null, sinBono: false, agrupado: cr.agrupado ? cr : null, cfam: cr.fam, cpack: !!cr.pack, cmet: metodoDe.get(String(cr.id)) || "" });
       } else {
         rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: 0, origen: "Sin bono", seller: null, sinBono: true });
       }
@@ -1434,6 +1434,247 @@ function PersonasTab({ payments, sessions, coaches, nowMin }) {
 // 1) qué pagar a cada entrenador, 2) quién debe dinero, 3) qué corregir en
 // AimHarder y 4) qué bonos toca renovar. Todo sale de los mismos cálculos
 // que «Por persona» (buildSessionLedger / pagoCoach).
+// ---------- Categoría (área) de cada cobro: Entrenamiento, Fisioterapia, Nutrición, Psicología u Otros
+const AREAS = ["Entrenamiento", "Fisioterapia", "Nutrici\xF3n", "Psicolog\xEDa", "Otros"];
+const AREA_COLOR = { Entrenamiento: "#2E7D4F", Fisioterapia: "#2563EB", "Nutrici\xF3n": "#B45309", "Psicolog\xEDa": "#7C3AED", Otros: "#6B7280" };
+const AREA_DE_FAMILIA = { "Entrenamiento personal": "Entrenamiento", "Valoraci\xF3n": "Entrenamiento", "Valoraci\xF3n inicial": "Entrenamiento", Grupos: "Entrenamiento", "Performance Group": "Entrenamiento", Online: "Entrenamiento", Fisioterapia: "Fisioterapia", "Nutrici\xF3n": "Nutrici\xF3n", "Psicolog\xEDa": "Psicolog\xEDa" };
+const areaDeTipoSesion = (tipo) => tipo === "Fisioterapia" ? "Fisioterapia" : tipo === "Nutrici\xF3n" ? "Nutrici\xF3n" : tipo === "Psicolog\xEDa" ? "Psicolog\xEDa" : "Entrenamiento";
+const mayoritaria = (m) => Object.entries(m).sort((a, b) => b[1] - a[1])[0][0];
+// Devuelve (pago) => { area, producto }. Los bonos que no dicen de qué son
+// («Bono 4 sesiones», «Sesión individual», «Viaje») toman el área de las sesiones
+// que se han gastado con ellos; si aún no tienen ninguna, la de quien los vendió.
+function crearAreaDe(rows) {
+  const uso = /* @__PURE__ */ new Map();
+  for (const r of rows || []) {
+    if (!r.cid || r.sinBono) continue;
+    const m = uso.get(r.cid) || {};
+    const a = areaDeTipoSesion(r.tipo);
+    m[a] = (m[a] || 0) + 1;
+    uso.set(r.cid, m);
+  }
+  const cache = /* @__PURE__ */ new Map();
+  return (p) => {
+    const id = String(p.id);
+    if (cache.has(id)) return cache.get(id);
+    const pr = productOf(p.co, p.cat);
+    const partes = pr.nombre.split(" \xB7 ");
+    const sufijo = partes.length > 1 ? partes[partes.length - 1] : "";
+    const generico = sufijo === "sin especificar" || pr.familia === "Viaje";
+    let area = null;
+    const serv = Array.isArray(p.servicios) ? p.servicios.filter((l) => l && l.fam) : [];
+    if (serv.length) {
+      const m = {};
+      for (const l of serv) {
+        const a = AREA_DE_FAMILIA[l.fam] || "Entrenamiento";
+        m[a] = (m[a] || 0) + (Number(l.n) || 1);
+      }
+      area = mayoritaria(m);
+    } else if (!generico && AREA_DE_FAMILIA[pr.familia]) area = AREA_DE_FAMILIA[pr.familia];
+    else if (uso.has(id)) area = mayoritaria(uso.get(id));
+    else if (pr.familia === "Otros") area = "Otros";
+    else {
+      const k = personKeyOfPayment(p);
+      area = k === "erik" ? "Fisioterapia" : "Entrenamiento";
+    }
+    // Nombre del producto sin la coletilla del área («Bono 4 sesiones · Fisioterapia» -> «Bono 4 sesiones»).
+    const quitar = ["sin especificar", "Entrenamiento personal", "Fisioterapia", "Nutrici\xF3n", "Psicolog\xEDa"];
+    const producto = partes.length > 1 && quitar.includes(sufijo) ? partes.slice(0, -1).join(" \xB7 ") : pr.nombre;
+    const r = { area, producto };
+    cache.set(id, r);
+    return r;
+  };
+}
+const eurC = (v) => (Number(v) || 0).toLocaleString("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtDMY = (d) => d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(2, 4)}` : "–";
+const METODOS = [["efectivo", "Efectivo"], ["tarjeta", "Tarjeta"], ["transferencia", "Transferencia"], ["domiciliado", "Domiciliado"], ["bizum", "Bizum"], ["otro", "Otro"]];
+const metodoLabel = (m) => (METODOS.find((x) => x[0] === m) || [null, m ? m.charAt(0).toUpperCase() + m.slice(1) : ""])[1];
+const origenDe = (p) => p.soloCaja ? "Caja" : p.caja ? "AimHarder + Caja" : p.ext ? "Externo" : "AimHarder";
+
+// Resumen mensual: cobros del mes por categoría; al pulsar una, el desglose de productos.
+function CobrosPorArea({ payments, month, payFilter, areaDe }) {
+  const h = React.createElement;
+  const [abierta, setAbierta] = useState(null);
+  const lista = payments.filter((p) => (p.d || "").startsWith(month) && (payFilter === "todos" || p.st === payFilter));
+  const porArea = {};
+  for (const p of lista) {
+    const { area, producto } = areaDe(p);
+    const a = porArea[area] = porArea[area] || { amt: 0, n: 0, prods: {} };
+    a.amt += p.amt;
+    a.n += 1;
+    const x = a.prods[producto] = a.prods[producto] || { amt: 0, n: 0 };
+    x.amt += p.amt;
+    x.n += 1;
+  }
+  const total = lista.reduce((a, p) => a + p.amt, 0);
+  const areas = AREAS.filter((a) => a !== "Otros" || porArea.Otros);
+  const etiquetaFiltro = payFilter === "fin" ? "cobrado" : payFilter === "pen" ? "pendiente" : "cobrado y pendiente";
+  const box = { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 };
+  const th = { padding: "6px 10px", borderBottom: "2px solid #12211B", fontSize: 12, textAlign: "right" };
+  const td = { padding: "6px 10px", borderBottom: "1px solid #EDF1EF", fontSize: 13, textAlign: "right" };
+  const det = abierta && porArea[abierta];
+  return h("div", { style: { padding: "0 22px 18px" } }, h("section", { style: box },
+    h("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Cobros por categor\xEDa"),
+    h("p", { style: { margin: "0 0 12px", fontSize: 12, color: C_MUTED } }, `Importe ${etiquetaFiltro} en ${monthLabel(month)} (AimHarder + Caja + externos), seg\xFAn el filtro «Cobrados / Pendientes / Todos» de arriba. Pulsa una categor\xEDa para ver los productos vendidos.`),
+    h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 } }, areas.map((a) => {
+      const v = porArea[a] || { amt: 0, n: 0 };
+      const on = abierta === a;
+      return h("button", {
+        key: a,
+        type: "button",
+        onClick: () => setAbierta(on ? null : a),
+        "aria-expanded": on,
+        disabled: !v.n,
+        style: { textAlign: "left", cursor: v.n ? "pointer" : "default", background: on ? "#F4F7F5" : "#fff", border: `1px solid ${on ? AREA_COLOR[a] : "#DDE4E0"}`, borderLeft: `5px solid ${AREA_COLOR[a]}`, borderRadius: 10, padding: "10px 12px", font: "inherit", color: "#12211B", opacity: v.n ? 1 : 0.55 }
+      },
+        h("div", { style: { fontSize: 12, fontWeight: 700, color: AREA_COLOR[a], textTransform: "uppercase", letterSpacing: 0.3 } }, a),
+        h("div", { className: "axis-display", style: { fontSize: 24, fontWeight: 700, margin: "2px 0" } }, eurC(v.amt)),
+        h("div", { style: { fontSize: 12, color: C_MUTED } }, `${v.n} cobro(s)`, total > 0 && v.amt ? ` \xB7 ${Math.round(v.amt / total * 100)} %` : "", v.n ? (on ? " \xB7 ocultar ▲" : " \xB7 ver productos ▼") : ""));
+    })),
+    h("p", { style: { margin: "10px 0 0", fontSize: 13 } }, "Total: ", h("b", null, eurC(total)), ` \xB7 ${lista.length} cobro(s)`),
+    det && h("div", { style: { marginTop: 14, overflowX: "auto" } },
+      h("h3", { style: { margin: "0 0 6px", fontSize: 15, color: AREA_COLOR[abierta] } }, `${abierta} \xB7 productos vendidos`),
+      h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 420 } },
+        h("thead", null, h("tr", null, h("th", { style: { ...th, textAlign: "left" } }, "Producto"), h("th", { style: th }, "Cobros"), h("th", { style: th }, "Importe"), h("th", { style: th }, "% de la categor\xEDa"))),
+        h("tbody", null,
+          Object.entries(det.prods).sort((a, b) => b[1].amt - a[1].amt).map(([nombre, x]) => h("tr", { key: nombre },
+            h("td", { style: { ...td, textAlign: "left", fontWeight: 600 } }, nombre),
+            h("td", { style: td }, x.n),
+            h("td", { style: td }, eurC(x.amt)),
+            h("td", { style: { ...td, color: C_MUTED } }, det.amt ? `${Math.round(x.amt / det.amt * 100)} %` : "–"))),
+          h("tr", null,
+            h("td", { style: { ...td, textAlign: "left", fontWeight: 800, borderTop: "2px solid #12211B" } }, "Total"),
+            h("td", { style: { ...td, fontWeight: 800, borderTop: "2px solid #12211B" } }, det.n),
+            h("td", { style: { ...td, fontWeight: 800, borderTop: "2px solid #12211B" } }, eurC(det.amt)),
+            h("td", { style: { ...td, borderTop: "2px solid #12211B" } }, "100 %")))),
+      h("p", { style: { margin: "8px 0 0", fontSize: 12, color: C_MUTED } }, "Los bonos que no dicen de qu\xE9 son (p. ej. «Bono 4 sesiones» o «Sesi\xF3n individual») van a la categor\xEDa de las sesiones que se han hecho con ellos. La valoraci\xF3n inicial, The Axis Club, Performance Group, grupo reducido y online cuentan como Entrenamiento."))));
+}
+
+// Pestaña «Cobros»: todos los cobros uno a uno (AimHarder, Caja y externos) con filtros.
+function TodosLosCobros({ payments, areaDe, month }) {
+  const h = React.createElement;
+  const finDeMes = (ym) => {
+    const [y, m] = ym.split("-").map(Number);
+    return `${ym}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
+  };
+  const [desde, setDesde] = useState(`${month}-01`);
+  const [hasta, setHasta] = useState(finDeMes(month));
+  const [persona, setPersona] = useState("");
+  const [area, setArea] = useState("");
+  const [producto, setProducto] = useState("");
+  const [metodo, setMetodo] = useState("");
+  const [estado, setEstado] = useState("");
+  const [origen, setOrigen] = useState("");
+  const [vendedor, setVendedor] = useState("");
+  const [orden, setOrden] = useState("fecha-desc");
+  const [mostrar, setMostrar] = useState(150);
+  const todos = useMemo(() => payments.map((p) => ({ ...p, ...areaDe(p), origen: origenDe(p), vend: CREATOR_LABELS[personKeyOfPayment(p)] || p.cr || "" })), [payments, areaDe]);
+  const productos = useMemo(() => [...new Set(todos.filter((p) => !area || p.area === area).map((p) => p.producto))].sort((a, b) => a.localeCompare(b, "es")), [todos, area]);
+  const clientes = useMemo(() => [...new Set(todos.map((p) => p.cl).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es")), [todos]);
+  const vendedores = useMemo(() => [...new Set(todos.map((p) => p.vend).filter(Boolean))].sort(), [todos]);
+  const q = normName(persona);
+  const lista = todos.filter((p) => (!desde || (p.d || "") >= desde) && (!hasta || (p.d || "") <= hasta) && (!q || normName(p.cl).includes(q)) && (!area || p.area === area) && (!producto || p.producto === producto) && (!metodo || (metodo === "__sin" ? !p.met : p.met === metodo)) && (!estado || p.st === estado) && (!origen || p.origen === origen) && (!vendedor || p.vend === vendedor));
+  const [campo, dir] = orden.split("-");
+  const val = (p) => campo === "importe" ? p.amt : campo === "cliente" ? normName(p.cl) : `${p.d || ""}|${p.id}`;
+  lista.sort((a, b) => {
+    const x = val(a), y = val(b);
+    return (x < y ? -1 : x > y ? 1 : 0) * (dir === "asc" ? 1 : -1);
+  });
+  const suma = (arr) => arr.reduce((a, p) => a + p.amt, 0);
+  const cobrados = lista.filter((p) => p.st === "fin");
+  const pendientes = lista.filter((p) => p.st === "pen");
+  const porMetodo = {};
+  for (const p of cobrados) {
+    const k = p.met || "otro";
+    porMetodo[k] = (porMetodo[k] || 0) + p.amt;
+  }
+  const rango = (a, b) => {
+    setDesde(a);
+    setHasta(b);
+    setMostrar(150);
+  };
+  const hoyYM = todayISO().slice(0, 7);
+  const limpiar = () => {
+    setPersona("");
+    setArea("");
+    setProducto("");
+    setMetodo("");
+    setEstado("");
+    setOrigen("");
+    setVendedor("");
+    setMostrar(150);
+  };
+  const descargar = () => {
+    const esc = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+    const cab = ["Fecha", "Cliente", "Concepto", "Categor\xEDa", "Producto", "Importe", "Forma de pago", "Estado", "Vendido por", "Origen"];
+    const filas = lista.map((p) => [p.d, p.cl, p.co, p.area, p.producto, String(p.amt.toFixed(2)).replace(".", ","), metodoLabel(p.met), p.st === "fin" ? "Cobrado" : "Pendiente", p.vend, p.origen].map(esc).join(";"));
+    const blob = new Blob(["﻿" + [cab.map(esc).join(";"), ...filas].join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `cobros_${desde || "inicio"}_${hasta || "hoy"}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1e3);
+  };
+  const box = { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 };
+  const lbl = { fontSize: 12, color: C_MUTED, display: "grid", gap: 3 };
+  const th = { padding: "7px 8px", borderBottom: "2px solid #12211B", fontSize: 12, textAlign: "left", whiteSpace: "nowrap", position: "sticky", top: 0, background: "#fff" };
+  const td = { padding: "7px 8px", borderBottom: "1px solid #EDF1EF", fontSize: 13, verticalAlign: "top" };
+  const sel = (value, set, opciones, todosTxt) => h("select", { className: "axis-input", value, onChange: (e) => {
+    set(e.target.value);
+    setMostrar(150);
+  } }, h("option", { value: "" }, todosTxt), opciones.map(([v, t]) => h("option", { key: v, value: v }, t)));
+  const hayFiltros = persona || area || producto || metodo || estado || origen || vendedor;
+  return h("div", { style: { padding: "14px 22px 18px", display: "grid", gap: 14 } },
+    h("section", { style: box },
+      h("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Todos los cobros"),
+      h("p", { style: { margin: "0 0 12px", fontSize: 12, color: C_MUTED } }, "Cada cobro uno a uno: los de AimHarder, los de la Caja (efectivo) y los pagos externos. La fecha es la del cobro (o la de emisi\xF3n si est\xE1 pendiente)."),
+      h("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 } },
+        [["Este mes", `${hoyYM}-01`, finDeMes(hoyYM)], ["Mes anterior", `${shiftMonth(hoyYM, -1)}-01`, finDeMes(shiftMonth(hoyYM, -1))], ["Este a\xF1o", `${hoyYM.slice(0, 4)}-01-01`, `${hoyYM.slice(0, 4)}-12-31`], ["Todo", "", ""]].map(([t, a, b]) => h("button", { key: t, type: "button", className: "axis-btn", onClick: () => rango(a, b), style: { padding: "5px 12px", background: desde === a && hasta === b ? "#12211B" : "#fff", color: desde === a && hasta === b ? "#fff" : "#12211B", border: "1px solid #C9D2CD" } }, t))),
+      h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 } },
+        h("label", { style: lbl }, "Desde", h("input", { type: "date", className: "axis-input", value: desde, onChange: (e) => rango(e.target.value, hasta) })),
+        h("label", { style: lbl }, "Hasta", h("input", { type: "date", className: "axis-input", value: hasta, onChange: (e) => rango(desde, e.target.value) })),
+        h("label", { style: lbl }, "Persona", h("input", { className: "axis-input", list: "axis-cobros-clientes", placeholder: "Nombre del cliente", value: persona, onChange: (e) => {
+          setPersona(e.target.value);
+          setMostrar(150);
+        } }), h("datalist", { id: "axis-cobros-clientes" }, clientes.map((c) => h("option", { key: c, value: c })))),
+        h("label", { style: lbl }, "Categor\xEDa", sel(area, (v) => {
+          setArea(v);
+          setProducto("");
+        }, AREAS.map((a) => [a, a]), "Todas")),
+        h("label", { style: lbl }, "Producto", sel(producto, setProducto, productos.map((x) => [x, x]), "Todos")),
+        h("label", { style: lbl }, "Forma de pago", sel(metodo, setMetodo, [...METODOS, ["__sin", "Sin forma de pago (pendiente)"]], "Todas")),
+        h("label", { style: lbl }, "Estado", sel(estado, setEstado, [["fin", "Cobrado"], ["pen", "Pendiente"]], "Todos")),
+        h("label", { style: lbl }, "Origen", sel(origen, setOrigen, [["AimHarder", "AimHarder"], ["Caja", "Caja"], ["AimHarder + Caja", "AimHarder + Caja"], ["Externo", "Externo"]], "Todos")),
+        h("label", { style: lbl }, "Vendido por", sel(vendedor, setVendedor, vendedores.map((v) => [v, v]), "Todos")),
+        h("label", { style: lbl }, "Ordenar", h("select", { className: "axis-input", value: orden, onChange: (e) => setOrden(e.target.value) }, [["fecha-desc", "Fecha (recientes primero)"], ["fecha-asc", "Fecha (antiguos primero)"], ["importe-desc", "Importe (mayor primero)"], ["importe-asc", "Importe (menor primero)"], ["cliente-asc", "Cliente (A-Z)"]].map(([v, t]) => h("option", { key: v, value: v }, t))))),
+      h("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 12 } },
+        hayFiltros && h("button", { type: "button", className: "axis-btn ghost", onClick: limpiar }, "Quitar filtros"),
+        h("button", { type: "button", className: "axis-btn ghost", onClick: descargar, disabled: !lista.length }, "⬇ Descargar (Excel/CSV)"))),
+    h("section", { style: box },
+      h("div", { style: { display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 8 } },
+        h("div", null, h("div", { style: { fontSize: 12, color: C_MUTED } }, "Cobros"), h("div", { className: "axis-display", style: { fontSize: 26, fontWeight: 700 } }, lista.length)),
+        h("div", null, h("div", { style: { fontSize: 12, color: C_MUTED } }, "Importe total"), h("div", { className: "axis-display", style: { fontSize: 26, fontWeight: 700 } }, eurC(suma(lista)))),
+        h("div", null, h("div", { style: { fontSize: 12, color: C_MUTED } }, `Cobrado (${cobrados.length})`), h("div", { className: "axis-display", style: { fontSize: 26, fontWeight: 700, color: C_GOOD } }, eurC(suma(cobrados)))),
+        h("div", null, h("div", { style: { fontSize: 12, color: C_MUTED } }, `Pendiente (${pendientes.length})`), h("div", { className: "axis-display", style: { fontSize: 26, fontWeight: 700, color: pendientes.length ? C_WARN : C_INK } }, eurC(suma(pendientes))))),
+      Object.keys(porMetodo).length > 0 && h("p", { style: { margin: "0 0 10px", fontSize: 13, color: C_MUTED } }, "Cobrado por forma de pago: ", Object.entries(porMetodo).sort((a, b) => b[1] - a[1]).map(([m, v], i) => h("span", { key: m }, i ? " \xB7 " : "", metodoLabel(m), " ", h("b", { style: { color: C_INK } }, eurC(v))))),
+      lista.length === 0 ? h("p", { style: { margin: 0, fontSize: 13, color: C_MUTED } }, "No hay cobros con estos filtros.") : h("div", { style: { overflow: "auto", maxHeight: "70vh" } },
+        h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 860 } },
+          h("thead", null, h("tr", null, ["Fecha", "Cliente", "Concepto", "Categor\xEDa", "Importe", "Forma de pago", "Estado", "Vendido por", "Origen"].map((t) => h("th", { key: t, style: t === "Importe" ? { ...th, textAlign: "right" } : th }, t)))),
+          h("tbody", null, lista.slice(0, mostrar).map((p) => h("tr", { key: p.id },
+            h("td", { style: { ...td, whiteSpace: "nowrap", color: C_MUTED } }, fmtDMY(p.d)),
+            h("td", { style: { ...td, fontWeight: 600 } }, p.cl || "–"),
+            h("td", { style: td }, p.co || p.cat || "–", p.nt ? h("div", { style: { fontSize: 11, color: C_MUTED } }, p.nt) : null),
+            h("td", { style: td }, h("span", { style: { color: AREA_COLOR[p.area], fontWeight: 700 } }, p.area), h("div", { style: { fontSize: 11, color: C_MUTED } }, p.producto)),
+            h("td", { style: { ...td, textAlign: "right", fontWeight: 700, whiteSpace: "nowrap" } }, eurC(p.amt)),
+            h("td", { style: td }, metodoLabel(p.met) || "–"),
+            h("td", { style: { ...td, color: p.st === "fin" ? C_GOOD : C_WARN, fontWeight: 600 } }, p.st === "fin" ? "Cobrado" : "Pendiente"),
+            h("td", { style: td }, p.vend || "–"),
+            h("td", { style: { ...td, fontSize: 12, color: C_MUTED } }, p.origen)))))),
+      lista.length > mostrar && h("div", { style: { marginTop: 10, display: "flex", gap: 10, alignItems: "center" } },
+        h("span", { style: { fontSize: 13, color: C_MUTED } }, `Mostrando ${mostrar} de ${lista.length}.`),
+        h("button", { type: "button", className: "axis-btn ghost", onClick: () => setMostrar((n) => n + 300) }, "Ver m\xE1s"),
+        h("button", { type: "button", className: "axis-btn ghost", onClick: () => setMostrar(lista.length) }, "Ver todos"))));
+}
+
 function GestionTab({ payments, sessions, coaches, nowMin }) {
   const h = React.createElement;
   const hoy = todayISO();
@@ -1665,13 +1906,16 @@ function AxisPanel() {
   const cajaAplicada = useMemo(() => CajaAxis.aplicar(paymentsRaw, caja.pagos), [paymentsRaw, caja.pagos]);
   const payments = cajaAplicada.payments;
   // Bonos (sesiones) de todos los pagos: la pestaña «Cobros» muestra cuáles quedan por usar.
-  const creditosCaja = useMemo(() => {
+  const ledgerTodo = useMemo(() => {
     try {
-      return buildSessionLedger(payments, sessions, coaches, todayISO(), nowMin).creditos || [];
+      return buildSessionLedger(payments, sessions, coaches, todayISO(), nowMin);
     } catch (e) {
       return [];
     }
   }, [payments, sessions, coaches, nowMin]);
+  const creditosCaja = ledgerTodo.creditos || [];
+  // Categoría (Entrenamiento, Fisioterapia, Nutrición, Psicología) y producto de cada cobro.
+  const areaDe = useMemo(() => crearAreaDe(ledgerTodo), [ledgerTodo]);
   const [payFilter, setPayFilter] = useState("fin");
   const [autoSyncUrl, setAutoSyncUrl] = useState("");
   const [autoSyncState, setAutoSyncState] = useState({ status: "idle", msg: "" });
@@ -2208,7 +2452,7 @@ function AxisPanel() {
       var _a, _b;
       return /* @__PURE__ */ React.createElement("td", { key: c, style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, textAlign: "right", fontWeight: 700 } }, eur(((_a = payStats.totals[c]) == null ? void 0 : _a.amt) || 0), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#5A6B63" } }, "(", ((_b = payStats.totals[c]) == null ? void 0 : _b.n) || 0, ")"));
     }), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, textAlign: "right", fontWeight: 800 } }, eur(payStats.grand), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#5A6B63" } }, "(", payStats.n, ")"))))), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: "#5A6B63", marginBottom: 0 } }, '"Creado por" indica qui\xE9n registr\xF3 el cobro, no necesariamente qui\xE9n dio la sesi\xF3n. La columna "Axis" re\xFAne los pagos creados con la cuenta del centro (Axis Health & Performance) o por el administrador: son ingresos del centro y no se suman a Marc, igual que en el Excel del plan financiero.')));
-  })(), tab === "stats" && /* @__PURE__ */ React.createElement(PagosExternosCard, { payments: paymentsRaw, setPayments, syncKey, serverUrl: SYNC_SERVER_URL, month }), tab === "caja" && /* @__PURE__ */ React.createElement(CajaAxis.CajaTab, { caja, info: cajaAplicada.info, month, setMonth, creditos: creditosCaja }), tab === "objetivos" && /* @__PURE__ */ React.createElement(ObjetivosTab, { payments, coaches }), tab === "personas" && /* @__PURE__ */ React.createElement(PersonasTab, { payments, sessions, coaches, nowMin }), tab === "gestion" && /* @__PURE__ */ React.createElement(GestionTab, { payments, sessions, coaches, nowMin }), tab === "equipo" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18, maxWidth: 760 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Equipo"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 12px", fontSize: 13, color: "#5A6B63" } }, "El email es el que se a\xF1adir\xE1 como invitado dentro del archivo .ics. Sin email, el evento se genera igualmente pero sin invitado."), coaches.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: c.id, className: "team-row" }, /* @__PURE__ */ React.createElement(
+  })(), tab === "stats" && React.createElement(CobrosPorArea, { payments, month, payFilter, areaDe }), tab === "stats" && /* @__PURE__ */ React.createElement(PagosExternosCard, { payments: paymentsRaw, setPayments, syncKey, serverUrl: SYNC_SERVER_URL, month }), tab === "caja" && React.createElement(TodosLosCobros, { payments, areaDe, month }), tab === "caja" && /* @__PURE__ */ React.createElement(CajaAxis.CajaTab, { caja, info: cajaAplicada.info, month, setMonth, creditos: creditosCaja }), tab === "objetivos" && /* @__PURE__ */ React.createElement(ObjetivosTab, { payments, coaches }), tab === "personas" && /* @__PURE__ */ React.createElement(PersonasTab, { payments, sessions, coaches, nowMin }), tab === "gestion" && /* @__PURE__ */ React.createElement(GestionTab, { payments, sessions, coaches, nowMin }), tab === "equipo" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18, maxWidth: 760 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Equipo"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 12px", fontSize: 13, color: "#5A6B63" } }, "El email es el que se a\xF1adir\xE1 como invitado dentro del archivo .ics. Sin email, el evento se genera igualmente pero sin invitado."), coaches.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: c.id, className: "team-row" }, /* @__PURE__ */ React.createElement(
     "input",
     {
       type: "color",
