@@ -906,9 +906,10 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
       const unitLibre = libres ? Math.max(0, p.amt - fijo) / libres : 0;
       const vend = personKeyOfPayment(p) === "axis" ? null : personKeyOfPayment(p);
       const lista = credits.get(key) || [];
+      const conEP = lineas.some((l) => l.fam === "Entrenamiento personal");
       for (const l of lineas) {
         const n = Number(l.n);
-        lista.push({ id: p.id, d: p.d || "", e: p.em || p.d || "", fam: l.fam, generic: !!l.generico && l.fam === "Entrenamiento personal", left: n, mes: null, uno: n === 1, unit: Number(l.valor) > 0 ? Number(l.valor) / n : unitLibre, origen: origenLabel({ nombre: p.co, sesiones: n }, l.fam), seller: vend, st: p.st });
+        lista.push({ pack: conEP, id: p.id, d: p.d || "", e: p.em || p.d || "", fam: l.fam, generic: !!l.generico && l.fam === "Entrenamiento personal", left: n, mes: null, uno: n === 1, unit: Number(l.valor) > 0 ? Number(l.valor) / n : unitLibre, origen: origenLabel({ nombre: p.co, sesiones: n }, l.fam), seller: vend, st: p.st });
       }
       credits.set(key, lista);
       continue;
@@ -916,7 +917,8 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
     if (pr.iniciacion && key && p.amt > 0) {
       const { ep, ass } = pr.iniciacion;
       const seller = personKeyOfPayment(p) === "axis" ? null : personKeyOfPayment(p);
-      const comun = { id: p.id, d: p.d || "", e: p.em || p.d || "", generic: false, origen: pr.nombre, seller, st: p.st };
+      // Pack con entrenamiento personal: su valoración lleva IVA.
+      const comun = { pack: ep > 0, id: p.id, d: p.d || "", e: p.em || p.d || "", generic: false, origen: pr.nombre, seller, st: p.st };
       const nuevos = [{ ...comun, fam: "Entrenamiento personal", left: ep, unit: (p.amt - (ass ? PRECIO_ASS_INICIACION : 0)) / ep }];
       if (ass) nuevos.push({ ...comun, fam: "Valoración inicial", left: 1, unit: PRECIO_ASS_INICIACION });
       credits.set(key, [...credits.get(key) || [], ...nuevos]);
@@ -1027,7 +1029,7 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
         cr.left -= 1;
         if (cr.agrupado) cr.n += 1;
         if (!cr.ultimo || s.date > cr.ultimo) cr.ultimo = s.date;
-        rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", cobro: cr.st === "fin" ? cr.d : null, sinBono: false, agrupado: cr.agrupado ? cr : null, cfam: cr.fam, cmet: metodoDe.get(String(cr.id)) || "" });
+        rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", cobro: cr.st === "fin" ? cr.d : null, sinBono: false, agrupado: cr.agrupado ? cr : null, cfam: cr.fam, cpack: !!cr.pack, cmet: metodoDe.get(String(cr.id)) || "" });
       } else {
         rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: 0, origen: "Sin bono", seller: null, sinBono: true });
       }
@@ -1082,15 +1084,17 @@ function valorPorPersona(rows, prefix) {
 // SIN IVA (lo que pagó el cliente por esa sesión de su bono, quitando el IVA);
 // The Axis Club se paga a precio fijo por sesión según los asistentes.
 // IVA por tipo de sesión: fisioterapia y nutrición están exentas (0 %); el resto, 21 %.
-// Además, las valoraciones iniciales de Erik (fisioterapeuta) van sin IVA.
-const IVA_0_POR_COACH = { erik: ["Valoración inicial"] };
+// La valoración inicial va sin IVA si se vende suelta, y con el 21 % si va dentro
+// de un pack que incluye entrenamiento personal (p. ej. «Iniciación (ASS + 3 EP)»).
+const IVA_0_POR_COACH = {};
+const ivaFila = (r, coach) => r.cfam === "Viaje" ? IVA_VIAJE : r.tipo === "Valoración inicial" ? r.cpack ? 0.21 : 0 : ivaDe(r.tipo, coach);
 // El servicio de viaje siempre lleva IVA, aunque la sesión sea de fisio.
 const IVA_VIAJE = 0.21;
 const ivaDe = (tipo, coach) => tipo === "Fisioterapia" || tipo === "Nutrición" || (IVA_0_POR_COACH[coach] || []).includes(tipo) ? 0 : 0.21;
 const PCT_100 = { "Entrenamiento personal": 1, "Fisioterapia": 1, "Performance Group": 1, "Valoración inicial": 1 };
 const PAGO_COACH = {
   marc: { pct: PCT_100, notas: ["The Axis Club no suma en su pago."] },
-  erik: { pct: PCT_100, notas: ["The Axis Club no suma en su pago.", "Sus valoraciones iniciales van sin IVA (0 %), como la fisioterapia."] },
+  erik: { pct: PCT_100, notas: ["The Axis Club no suma en su pago."] },
   marti: {
     pct: { "Nutrición": 0.7, "Fisioterapia": 0.7 },
     notas: ["Pack trimestral de nutrición = 4 sesiones: valoración inicial, entrega del pack nutricional y 2 seguimientos (precio del pack ÷ 4 por sesión).", "Martí es el único nutricionista: los packs de nutrición solo cubren sus sesiones de nutrición."]
@@ -1119,7 +1123,7 @@ function leyendaPago(cfg) {
   return [...l, ...cfg.notas || []];
 }
 const LEYENDA_COMUN = [
-  "Valor de una sesión = lo que pagó el cliente por esa sesión de su bono (precio del bono ÷ número de sesiones), sin IVA: 21 %, salvo fisioterapia, nutrición y las valoraciones de Erik (0 %).",
+  "Valor de una sesión = lo que pagó el cliente por esa sesión de su bono (precio del bono ÷ número de sesiones), sin IVA: 21 %, salvo fisioterapia, nutrición y la valoración inicial vendida suelta (0 %). La valoración que va dentro de un pack con entrenamiento personal lleva el 21 %.",
   "Solo cuentan las sesiones ya impartidas, según el entrenador asignado en AimHarder; cada cliente de la sesión gasta una sesión de su bono, por orden de compra.",
   "Cada sesión se paga el mes en que Axis cobra el bono del que sale (o el mes de la sesión, si el bono ya estaba cobrado). Las de bonos pendientes aparecen aparte y se pagan cuando se cobren.",
   "Viaje: servicio único que cubre una sesión de EP o de fisioterapia; siempre con IVA del 21 %, también si es fisio.",
@@ -1157,7 +1161,7 @@ function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
       key = conOtro ? "val|otro" : "val|solo";
       concepto = conOtro ? "Valoración inicial (con otro entrenador)" : "Valoración inicial (solo)";
     }
-    const base = r.value / (1 + (r.cfam === "Viaje" ? IVA_VIAJE : ivaDe(r.tipo, k)));
+    const base = r.value / (1 + ivaFila(r, k));
     const pago = base * pct;
     const fila = { date: r.date, start: r.start, tipo: key.startsWith("val|") ? concepto : r.tipo, quien: r.client, origen: r.origen, base, pago, cobro: r.cobro || null, met: r.cmet || "", sinBono: r.sinBono };
     if (r.sinBono) {
