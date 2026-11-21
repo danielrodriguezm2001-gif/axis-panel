@@ -1549,8 +1549,54 @@ function CobrosPorArea({ payments, month, payFilter, areaDe }) {
       h("p", { style: { margin: "8px 0 0", fontSize: 12, color: C_MUTED } }, "Los bonos que no dicen de qu\xE9 son (p. ej. «Bono 4 sesiones» o «Sesi\xF3n individual») van a la categor\xEDa de las sesiones que se han hecho con ellos. La valoraci\xF3n inicial, The Axis Club, Performance Group, grupo reducido y online cuentan como Entrenamiento."))));
 }
 
+const FAM_CORTA = { "Entrenamiento personal": "EP", "Fisioterapia": "Fisio", "Nutrici\xF3n": "Nutri", "Performance Group": "PG", "Valoraci\xF3n inicial": "Valoraci\xF3n", "Online": "Online", "Viaje": "Viaje" };
+// Sesiones de bono que le quedan por consumir a cada persona (todos sus bonos juntos).
+function BonosPorPersona({ payments, creditos, persona, box }) {
+  const h = React.createElement;
+  const [verTodos, setVerTodos] = useState(false);
+  const [abierto, setAbierto] = useState(true);
+  const filas = useMemo(() => {
+    const byId = new Map(payments.map((p) => [String(p.id), p]));
+    const g = new Map();
+    for (const c of creditos || []) {
+      if (c.agrupado || !Number.isFinite(c.total)) continue;
+      const p = byId.get(String(c.id));
+      if (!p || !p.cl || p.st !== "fin") continue;
+      const k = normName(p.cl);
+      const e = g.get(k) || g.set(k, { cl: p.cl, fams: new Map(), left: 0, total: 0, ultimoPago: "" }).get(k);
+      const f = e.fams.get(c.fam) || e.fams.set(c.fam, { left: 0, total: 0 }).get(c.fam);
+      f.left += c.left;
+      f.total += c.total;
+      e.left += c.left;
+      e.total += c.total;
+      if (c.d > e.ultimoPago) e.ultimoPago = c.d;
+    }
+    return [...g.values()].sort((a, b) => b.left - a.left || a.cl.localeCompare(b.cl, "es"));
+  }, [payments, creditos]);
+  const visibles = filas.filter((f) => (verTodos || f.left > 0) && (!persona || normName(f.cl).includes(persona)));
+  const totalQuedan = visibles.reduce((a, f) => a + f.left, 0);
+  const th = { padding: "7px 8px", borderBottom: "2px solid #12211B", fontSize: 12, textAlign: "left", whiteSpace: "nowrap", position: "sticky", top: 0, background: "#fff" };
+  const td = { padding: "7px 8px", borderBottom: "1px solid #EDF1EF", fontSize: 13, verticalAlign: "top" };
+  return h("section", { style: box },
+    h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" } },
+      h("h2", { className: "axis-display", style: { margin: 0, fontSize: 20, textTransform: "uppercase" } }, "Bonos por consumir"),
+      h("div", { style: { display: "flex", gap: 8 } },
+        h("button", { type: "button", className: "axis-btn ghost", onClick: () => setVerTodos((v) => !v) }, verTodos ? "Solo con sesiones por usar" : "Incluir completados"),
+        h("button", { type: "button", className: "axis-btn ghost", onClick: () => setAbierto((v) => !v) }, abierto ? "Ocultar" : "Mostrar"))),
+    h("p", { style: { margin: "6px 0 10px", fontSize: 12, color: C_MUTED } }, "Sesiones pagadas que cada persona todav\xEDa no ha gastado (solo pagos cobrados; las sesiones que ya ha hecho se descuentan solas). Se filtra con la casilla \u00ABPersona\u00BB de abajo."),
+    h("p", { style: { margin: "0 0 8px", fontSize: 14 } }, h("b", null, visibles.length), " persona(s) \xB7 ", h("b", { style: { color: C_WARN } }, totalQuedan), " sesi\xF3n(es) por consumir"),
+    abierto && (visibles.length === 0 ? h("p", { style: { margin: 0, fontSize: 13, color: C_MUTED } }, "Nadie tiene sesiones por consumir.") : h("div", { style: { overflow: "auto", maxHeight: "50vh" } },
+      h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 520 } },
+        h("thead", null, h("tr", null, h("th", { style: th }, "Persona"), h("th", { style: th }, "Por categor\xEDa (usadas/total)"), h("th", { style: { ...th, textAlign: "right" } }, "Por consumir"), h("th", { style: th }, "\xDAltimo pago"))),
+        h("tbody", null, visibles.map((f) => h("tr", { key: f.cl },
+          h("td", { style: { ...td, fontWeight: 600 } }, f.cl),
+          h("td", { style: { ...td, fontSize: 12 } }, [...f.fams.entries()].map(([fam, v]) => h("span", { key: fam, style: { marginRight: 12, whiteSpace: "nowrap", color: v.left > 0 ? C_WARN : C_GOOD, fontWeight: 600 } }, `${FAM_CORTA[fam] || fam} ${v.total - v.left}/${v.total}`))),
+          h("td", { style: { ...td, textAlign: "right", fontWeight: 800, color: f.left > 0 ? C_WARN : C_GOOD } }, f.left),
+          h("td", { style: { ...td, color: C_MUTED, whiteSpace: "nowrap" } }, fmtDMY(f.ultimoPago)))))))));
+}
+
 // Pestaña «Cobros»: todos los cobros uno a uno (AimHarder, Caja y externos) con filtros.
-function TodosLosCobros({ payments, areaDe, month }) {
+function TodosLosCobros({ payments, areaDe, month, creditos }) {
   const h = React.createElement;
   const finDeMes = (ym) => {
     const [y, m] = ym.split("-").map(Number);
@@ -1565,14 +1611,28 @@ function TodosLosCobros({ payments, areaDe, month }) {
   const [estado, setEstado] = useState("");
   const [origen, setOrigen] = useState("");
   const [vendedor, setVendedor] = useState("");
+  const [bono, setBono] = useState("");
   const [orden, setOrden] = useState("fecha-desc");
   const [mostrar, setMostrar] = useState(150);
-  const todos = useMemo(() => payments.map((p) => ({ ...p, ...areaDe(p), origen: origenDe(p), vend: CREATOR_LABELS[personKeyOfPayment(p)] || p.cr || "" })), [payments, areaDe]);
+  const bonosPorPago = useMemo(() => {
+    const m = new Map();
+    for (const c of creditos || []) {
+      if (c.agrupado || !Number.isFinite(c.total)) continue;
+      const k = String(c.id);
+      m.set(k, [...m.get(k) || [], c]);
+    }
+    return m;
+  }, [creditos]);
+  const todos = useMemo(() => payments.map((p) => {
+    const bs = bonosPorPago.get(String(p.id)) || [];
+    const quedan = bs.reduce((a, b) => a + b.left, 0);
+    return { ...p, ...areaDe(p), origen: origenDe(p), vend: CREATOR_LABELS[personKeyOfPayment(p)] || p.cr || "", bonos: bs, quedan, estadoBono: !bs.length ? "sin" : quedan > 0 ? "quedan" : "completo" };
+  }), [payments, areaDe, bonosPorPago]);
   const productos = useMemo(() => [...new Set(todos.filter((p) => !area || p.area === area).map((p) => p.producto))].sort((a, b) => a.localeCompare(b, "es")), [todos, area]);
   const clientes = useMemo(() => [...new Set(todos.map((p) => p.cl).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es")), [todos]);
   const vendedores = useMemo(() => [...new Set(todos.map((p) => p.vend).filter(Boolean))].sort(), [todos]);
   const q = normName(persona);
-  const lista = todos.filter((p) => (!desde || (p.d || "") >= desde) && (!hasta || (p.d || "") <= hasta) && (!q || normName(p.cl).includes(q)) && (!area || p.area === area) && (!producto || p.producto === producto) && (!metodo || (metodo === "__sin" ? !p.met : p.met === metodo)) && (!estado || p.st === estado) && (!origen || p.origen === origen) && (!vendedor || p.vend === vendedor));
+  const lista = todos.filter((p) => (!desde || (p.d || "") >= desde) && (!hasta || (p.d || "") <= hasta) && (!q || normName(p.cl).includes(q)) && (!area || p.area === area) && (!producto || p.producto === producto) && (!metodo || (metodo === "__sin" ? !p.met : p.met === metodo)) && (!estado || p.st === estado) && (!origen || p.origen === origen) && (!vendedor || p.vend === vendedor) && (!bono || p.estadoBono === bono));
   const [campo, dir] = orden.split("-");
   const val = (p) => campo === "importe" ? p.amt : campo === "cliente" ? normName(p.cl) : `${p.d || ""}|${p.id}`;
   lista.sort((a, b) => {
@@ -1601,12 +1661,13 @@ function TodosLosCobros({ payments, areaDe, month }) {
     setEstado("");
     setOrigen("");
     setVendedor("");
+    setBono("");
     setMostrar(150);
   };
   const descargar = () => {
     const esc = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-    const cab = ["Fecha", "Cliente", "Concepto", "Categor\xEDa", "Producto", "Importe", "Forma de pago", "Estado", "Vendido por", "Origen"];
-    const filas = lista.map((p) => [p.d, p.cl, p.co, p.area, p.producto, String(p.amt.toFixed(2)).replace(".", ","), metodoLabel(p.met), p.st === "fin" ? "Cobrado" : "Pendiente", p.vend, p.origen].map(esc).join(";"));
+    const cab = ["Fecha", "Cliente", "Concepto", "Categor\xEDa", "Producto", "Importe", "Forma de pago", "Estado", "Vendido por", "Origen", "Sesiones del bono", "Sesiones usadas", "Sesiones por usar"];
+    const filas = lista.map((p) => [p.d, p.cl, p.co, p.area, p.producto, String(p.amt.toFixed(2)).replace(".", ","), metodoLabel(p.met), p.st === "fin" ? "Cobrado" : "Pendiente", p.vend, p.origen, p.bonos.length ? p.bonos.reduce((a, b) => a + b.total, 0) : "", p.bonos.length ? p.bonos.reduce((a, b) => a + b.total - b.left, 0) : "", p.bonos.length ? p.quedan : ""].map(esc).join(";"));
     const blob = new Blob(["﻿" + [cab.map(esc).join(";"), ...filas].join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -1622,7 +1683,7 @@ function TodosLosCobros({ payments, areaDe, month }) {
     set(e.target.value);
     setMostrar(150);
   } }, h("option", { value: "" }, todosTxt), opciones.map(([v, t]) => h("option", { key: v, value: v }, t)));
-  const hayFiltros = persona || area || producto || metodo || estado || origen || vendedor;
+  const hayFiltros = persona || area || producto || metodo || estado || origen || vendedor || bono;
   return h("div", { style: { padding: "14px 22px 18px", display: "grid", gap: 14 } },
     h("section", { style: box },
       h("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Todos los cobros"),
@@ -1645,10 +1706,12 @@ function TodosLosCobros({ payments, areaDe, month }) {
         h("label", { style: lbl }, "Estado", sel(estado, setEstado, [["fin", "Cobrado"], ["pen", "Pendiente"]], "Todos")),
         h("label", { style: lbl }, "Origen", sel(origen, setOrigen, [["AimHarder", "AimHarder"], ["Caja", "Caja"], ["AimHarder + Caja", "AimHarder + Caja"], ["Externo", "Externo"]], "Todos")),
         h("label", { style: lbl }, "Vendido por", sel(vendedor, setVendedor, vendedores.map((v) => [v, v]), "Todos")),
+        h("label", { style: lbl }, "Bono", sel(bono, setBono, [["quedan", "Con sesiones por usar"], ["completo", "Bono completado"], ["sin", "Sin bono"]], "Todos")),
         h("label", { style: lbl }, "Ordenar", h("select", { className: "axis-input", value: orden, onChange: (e) => setOrden(e.target.value) }, [["fecha-desc", "Fecha (recientes primero)"], ["fecha-asc", "Fecha (antiguos primero)"], ["importe-desc", "Importe (mayor primero)"], ["importe-asc", "Importe (menor primero)"], ["cliente-asc", "Cliente (A-Z)"]].map(([v, t]) => h("option", { key: v, value: v }, t))))),
       h("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 12 } },
         hayFiltros && h("button", { type: "button", className: "axis-btn ghost", onClick: limpiar }, "Quitar filtros"),
         h("button", { type: "button", className: "axis-btn ghost", onClick: descargar, disabled: !lista.length }, "⬇ Descargar (Excel/CSV)"))),
+    h(BonosPorPersona, { payments, creditos, persona: q, box }),
     h("section", { style: box },
       h("div", { style: { display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 8 } },
         h("div", null, h("div", { style: { fontSize: 12, color: C_MUTED } }, "Cobros"), h("div", { className: "axis-display", style: { fontSize: 26, fontWeight: 700 } }, lista.length)),
@@ -1657,8 +1720,8 @@ function TodosLosCobros({ payments, areaDe, month }) {
         h("div", null, h("div", { style: { fontSize: 12, color: C_MUTED } }, `Pendiente (${pendientes.length})`), h("div", { className: "axis-display", style: { fontSize: 26, fontWeight: 700, color: pendientes.length ? C_WARN : C_INK } }, eurC(suma(pendientes))))),
       Object.keys(porMetodo).length > 0 && h("p", { style: { margin: "0 0 10px", fontSize: 13, color: C_MUTED } }, "Cobrado por forma de pago: ", Object.entries(porMetodo).sort((a, b) => b[1] - a[1]).map(([m, v], i) => h("span", { key: m }, i ? " \xB7 " : "", metodoLabel(m), " ", h("b", { style: { color: C_INK } }, eurC(v))))),
       lista.length === 0 ? h("p", { style: { margin: 0, fontSize: 13, color: C_MUTED } }, "No hay cobros con estos filtros.") : h("div", { style: { overflow: "auto", maxHeight: "70vh" } },
-        h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 860 } },
-          h("thead", null, h("tr", null, ["Fecha", "Cliente", "Concepto", "Categor\xEDa", "Importe", "Forma de pago", "Estado", "Vendido por", "Origen"].map((t) => h("th", { key: t, style: t === "Importe" ? { ...th, textAlign: "right" } : th }, t)))),
+        h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 960 } },
+          h("thead", null, h("tr", null, ["Fecha", "Cliente", "Concepto", "Categor\xEDa", "Importe", "Forma de pago", "Estado", "Bono", "Vendido por", "Origen"].map((t) => h("th", { key: t, style: t === "Importe" ? { ...th, textAlign: "right" } : th }, t)))),
           h("tbody", null, lista.slice(0, mostrar).map((p) => h("tr", { key: p.id },
             h("td", { style: { ...td, whiteSpace: "nowrap", color: C_MUTED } }, fmtDMY(p.d)),
             h("td", { style: { ...td, fontWeight: 600 } }, p.cl || "–"),
@@ -1667,6 +1730,7 @@ function TodosLosCobros({ payments, areaDe, month }) {
             h("td", { style: { ...td, textAlign: "right", fontWeight: 700, whiteSpace: "nowrap" } }, eurC(p.amt)),
             h("td", { style: td }, metodoLabel(p.met) || "–"),
             h("td", { style: { ...td, color: p.st === "fin" ? C_GOOD : C_WARN, fontWeight: 600 } }, p.st === "fin" ? "Cobrado" : "Pendiente"),
+            h("td", { style: { ...td, fontSize: 12, whiteSpace: "nowrap" } }, p.bonos.length ? p.bonos.map((k, i) => h("div", { key: i, style: { color: k.left > 0 ? C_WARN : C_GOOD, fontWeight: 600 }, title: k.left > 0 ? "Sesiones sin usar" : "Bono completado" }, `${FAM_CORTA[k.fam] || k.fam} ${k.total - k.left}/${k.total}`, k.left > 0 ? ` \xB7 quedan ${k.left}` : " \u2713")) : h("span", { style: { color: C_MUTED } }, "\u2013")),
             h("td", { style: td }, p.vend || "–"),
             h("td", { style: { ...td, fontSize: 12, color: C_MUTED } }, p.origen)))))),
       lista.length > mostrar && h("div", { style: { marginTop: 10, display: "flex", gap: 10, alignItems: "center" } },
@@ -2452,7 +2516,7 @@ function AxisPanel() {
       var _a, _b;
       return /* @__PURE__ */ React.createElement("td", { key: c, style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, textAlign: "right", fontWeight: 700 } }, eur(((_a = payStats.totals[c]) == null ? void 0 : _a.amt) || 0), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#5A6B63" } }, "(", ((_b = payStats.totals[c]) == null ? void 0 : _b.n) || 0, ")"));
     }), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", borderTop: "2px solid #12211B", fontSize: 13, textAlign: "right", fontWeight: 800 } }, eur(payStats.grand), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#5A6B63" } }, "(", payStats.n, ")"))))), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: "#5A6B63", marginBottom: 0 } }, '"Creado por" indica qui\xE9n registr\xF3 el cobro, no necesariamente qui\xE9n dio la sesi\xF3n. La columna "Axis" re\xFAne los pagos creados con la cuenta del centro (Axis Health & Performance) o por el administrador: son ingresos del centro y no se suman a Marc, igual que en el Excel del plan financiero.')));
-  })(), tab === "stats" && React.createElement(CobrosPorArea, { payments, month, payFilter, areaDe }), tab === "stats" && /* @__PURE__ */ React.createElement(PagosExternosCard, { payments: paymentsRaw, setPayments, syncKey, serverUrl: SYNC_SERVER_URL, month }), tab === "caja" && React.createElement(TodosLosCobros, { payments, areaDe, month }), tab === "caja" && /* @__PURE__ */ React.createElement(CajaAxis.CajaTab, { caja, info: cajaAplicada.info, month, setMonth, creditos: creditosCaja }), tab === "objetivos" && /* @__PURE__ */ React.createElement(ObjetivosTab, { payments, coaches }), tab === "personas" && /* @__PURE__ */ React.createElement(PersonasTab, { payments, sessions, coaches, nowMin }), tab === "gestion" && /* @__PURE__ */ React.createElement(GestionTab, { payments, sessions, coaches, nowMin }), tab === "equipo" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18, maxWidth: 760 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Equipo"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 12px", fontSize: 13, color: "#5A6B63" } }, "El email es el que se a\xF1adir\xE1 como invitado dentro del archivo .ics. Sin email, el evento se genera igualmente pero sin invitado."), coaches.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: c.id, className: "team-row" }, /* @__PURE__ */ React.createElement(
+  })(), tab === "stats" && React.createElement(CobrosPorArea, { payments, month, payFilter, areaDe }), tab === "stats" && /* @__PURE__ */ React.createElement(PagosExternosCard, { payments: paymentsRaw, setPayments, syncKey, serverUrl: SYNC_SERVER_URL, month }), tab === "caja" && React.createElement(TodosLosCobros, { payments, areaDe, month, creditos: creditosCaja }), tab === "caja" && /* @__PURE__ */ React.createElement(CajaAxis.CajaTab, { caja, info: cajaAplicada.info, month, setMonth, creditos: creditosCaja }), tab === "objetivos" && /* @__PURE__ */ React.createElement(ObjetivosTab, { payments, coaches }), tab === "personas" && /* @__PURE__ */ React.createElement(PersonasTab, { payments, sessions, coaches, nowMin }), tab === "gestion" && /* @__PURE__ */ React.createElement(GestionTab, { payments, sessions, coaches, nowMin }), tab === "equipo" && /* @__PURE__ */ React.createElement("div", { style: { padding: "0 22px 30px", display: "grid", gap: 18, maxWidth: 760 } }, /* @__PURE__ */ React.createElement("section", { style: { background: "#fff", border: "1px solid #DDE4E0", borderRadius: 12, padding: 16 } }, /* @__PURE__ */ React.createElement("h2", { className: "axis-display", style: { margin: "0 0 4px", fontSize: 20, textTransform: "uppercase" } }, "Equipo"), /* @__PURE__ */ React.createElement("p", { style: { margin: "0 0 12px", fontSize: 13, color: "#5A6B63" } }, "El email es el que se a\xF1adir\xE1 como invitado dentro del archivo .ics. Sin email, el evento se genera igualmente pero sin invitado."), coaches.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: c.id, className: "team-row" }, /* @__PURE__ */ React.createElement(
     "input",
     {
       type: "color",
