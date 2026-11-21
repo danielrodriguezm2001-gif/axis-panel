@@ -888,6 +888,8 @@ function mesDelConcepto(concepto) {
 }
 function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SES_VALORADAS) {
   const credits = /* @__PURE__ */ new Map();
+  // Forma de pago de cada cobro (efectivo, transferencia, tarjeta, domiciliado…).
+  const metodoDe = new Map(payments.map((p) => [String(p.id), p.met || ""]));
   for (const p of payments) {
     if (p.ext) continue; // pago externo: no cubre sesiones de AimHarder
     let pr = productOf(p.co, p.cat);
@@ -1025,7 +1027,7 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
         cr.left -= 1;
         if (cr.agrupado) cr.n += 1;
         if (!cr.ultimo || s.date > cr.ultimo) cr.ultimo = s.date;
-        rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", cobro: cr.st === "fin" ? cr.d : null, sinBono: false, agrupado: cr.agrupado ? cr : null, cfam: cr.fam });
+        rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", cobro: cr.st === "fin" ? cr.d : null, sinBono: false, agrupado: cr.agrupado ? cr : null, cfam: cr.fam, cmet: metodoDe.get(String(cr.id)) || "" });
       } else {
         rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: 0, origen: "Sin bono", seller: null, sinBono: true });
       }
@@ -1137,6 +1139,7 @@ function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
   const detalle = [];
   const pendientes = [];
   const sinBono = [];
+  const efectivo = { mes: 0, atras: 0 };
   const porId = new Map(sessions.map((s) => [s.id, s]));
   const compartida = (sid) => {
     const v = porId.get(sid);
@@ -1156,7 +1159,7 @@ function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
     }
     const base = r.value / (1 + (r.cfam === "Viaje" ? IVA_VIAJE : ivaDe(r.tipo, k)));
     const pago = base * pct;
-    const fila = { date: r.date, start: r.start, tipo: key.startsWith("val|") ? concepto : r.tipo, quien: r.client, origen: r.origen, base, pago, cobro: r.cobro || null, sinBono: r.sinBono };
+    const fila = { date: r.date, start: r.start, tipo: key.startsWith("val|") ? concepto : r.tipo, quien: r.client, origen: r.origen, base, pago, cobro: r.cobro || null, met: r.cmet || "", sinBono: r.sinBono };
     if (r.sinBono) {
       if (mesSesion.startsWith(prefix)) sinBono.push(fila);
       continue;
@@ -1172,6 +1175,8 @@ function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
     l.n += 1;
     l.base += base;
     l.pago += pago;
+    // Lo que el cliente pagó en efectivo se le paga al entrenador en efectivo.
+    if (fila.met === "efectivo") efectivo[g] += pago;
     detalle.push({ ...fila, atras: g === "atras" });
   }
   for (const s of sessions) {
@@ -1194,6 +1199,10 @@ function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
     totalMes: suma(mes, "pago"),
     totalAtras: suma(atras, "pago"),
     total: suma(mes, "pago") + suma(atras, "pago"),
+    efectivoMes: efectivo.mes,
+    efectivoAtras: efectivo.atras,
+    efectivo: efectivo.mes + efectivo.atras,
+    banco: suma(mes, "pago") + suma(atras, "pago") - efectivo.mes - efectivo.atras,
     detalle: detalle.sort(porFecha),
     pendientes: pendientes.sort(porFecha),
     sinBono: sinBono.sort(porFecha)
@@ -1224,13 +1233,17 @@ function PagoCoach({ k, p, ledger, sessions, coaches, periodo, month, year, etiq
   const pendPorCliente = Object.entries(r.pendientes.reduce((m, x) => ((m[x.quien] = m[x.quien] || []).push(x), m), {})).sort((a, b) => b[1].length - a[1].length);
   const sinB = [...new Set(r.sinBono.map((d) => d.quien))];
   const todas = [...r.detalle, ...r.pendientes.map((x) => ({ ...x, pendiente: true })), ...r.sinBono].sort((a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || "")));
-  const estado = (d) => d.club ? "Tarifa fija" : d.sinBono ? "Sin bono" : d.pendiente ? "Pendiente de cobro" : `Cobrado ${fmtD(d.cobro)}`;
+  const estado = (d) => d.club ? "Tarifa fija" : d.sinBono ? "Sin bono" : d.pendiente ? "Pendiente de cobro" : `Cobrado ${fmtD(d.cobro)}${d.met ? ` \xB7 ${d.met}` : ""}`;
   return h("section", { style: { ...card, overflowX: "auto", borderLeft: `6px solid ${p.color}` } },
     h("h2", { className: "axis-display", style: h2s }, "A pagar a ", p.short, " · ", etiquetaPeriodo),
     h("div", { style: { margin: "6px 0 12px", padding: "10px 14px", background: C_SOFT, borderRadius: 8, fontSize: 12 } },
       h("div", { style: { fontWeight: 700, marginBottom: 4, textTransform: "uppercase", letterSpacing: ".05em", fontSize: 11, color: C_MUTED } }, "Cómo se calcula el pago de ", p.short),
       h("ul", { style: { margin: 0, paddingLeft: 18, lineHeight: 1.5 } }, leyendaPago(PAGO_COACH[k]).map((t) => h("li", { key: t, style: { fontWeight: 600 } }, t)), LEYENDA_COMUN.map((t) => h("li", { key: t, style: { color: C_MUTED } }, t)))),
-    h("div", { className: "axis-display", style: { fontSize: 34, fontWeight: 700, margin: "4px 0 12px" } }, eur2(r.total)),
+    h("div", { className: "axis-display", style: { fontSize: 34, fontWeight: 700, margin: "4px 0 4px" } }, eur2(r.total)),
+    r.total > 0 && h("div", { style: { display: "flex", gap: 18, flexWrap: "wrap", margin: "0 0 12px", fontSize: 13 } },
+      h("span", null, "\uD83D\uDCB6 En efectivo: ", h("b", null, eur2(r.efectivo))),
+      h("span", null, "\uD83C\uDFE6 Por banco: ", h("b", null, eur2(r.banco))),
+      h("span", { style: { color: C_MUTED, fontSize: 12 } }, "Seg\xFAn c\xF3mo pag\xF3 el cliente cada sesi\xF3n en AimHarder.")),
     r.mes.length + r.atras.length === 0 ? h("p", { style: { fontSize: 13, color: C_MUTED, margin: 0 } }, "Nada cobrado que pagar en ", etiquetaPeriodo, ".") : h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 560 } },
       h("thead", null, h("tr", null, h("th", { style: { ...th, textAlign: "left" } }, "Concepto"), h("th", { style: th }, "Sesiones"), h("th", { style: th }, "Valor sin IVA"), h("th", { style: th }, "Tarifa"), h("th", { style: th }, "A pagar"))),
       h("tbody", null,
@@ -1467,12 +1480,14 @@ function GestionTab({ payments, sessions, coaches, nowMin }) {
     "",
     ...pagos.flatMap((x) => [
       `*${P(x.k).short}: ${eur2(x.r.total)}*`,
+      `• \uD83D\uDCB6 En efectivo: ${eur2(x.r.efectivo)} · \uD83C\uDFE6 Por banco: ${eur2(x.r.banco)}`,
       `• Sesiones de ${nombreMes} ya cobradas: ${eur2(x.r.totalMes)}`,
       ...(x.r.totalAtras ? [`• De meses anteriores cobradas en ${nombreMes}: ${eur2(x.r.totalAtras)}`] : []),
       ...(x.r.pendientes.length ? [`• Pendiente de cobro (aún no se paga): ${x.r.pendientes.length} sesiones · ${eur2(x.pend)}`] : []),
       ""
     ]),
     `*Total a pagar: ${eur2(totalPagar)}*`,
+    `\uD83D\uDCB6 En efectivo: ${eur2(pagos.reduce((a, x) => a + x.r.efectivo, 0))} · \uD83C\uDFE6 Por banco: ${eur2(pagos.reduce((a, x) => a + x.r.banco, 0))}`,
     "_Importes sin IVA. Una sesión se paga cuando el cliente la ha pagado y el entrenador la ha dado._"
   ].join("\n");
 
@@ -1594,12 +1609,12 @@ function GestionTab({ payments, sessions, coaches, nowMin }) {
     resumenSec,
 
     seccion(`Pagos a entrenadores · ${etiqueta}`, pagos.length > 0 && botonCopiar("pagos", textoPagos),
-      h("p", { style: nota }, "Sin IVA. Se paga cada sesión el mes en que se cobra su bono. El detalle sesión a sesión está en «Por persona»."),
+      h("p", { style: nota }, "Sin IVA. Se paga cada sesión el mes en que se cobra su bono. «En efectivo» es la parte que sale de cobros que el cliente pagó en efectivo; el resto, por banco. El detalle sesión a sesión está en «Por persona»."),
       pagos.length === 0 ? h("p", { style: { fontSize: 13, color: C_MUTED, margin: 0 } }, "Nada que pagar en ", etiqueta, ".") : h("table", { style: { borderCollapse: "collapse", width: "100%", minWidth: 640 } },
-        h("thead", null, h("tr", null, h("th", { style: { ...th, textAlign: "left" } }, "Entrenador"), h("th", { style: th }, `Sesiones de ${nombreMes}`), h("th", { style: th }, "De meses anteriores"), h("th", { style: th }, "A pagar"), h("th", { style: th }, "Pendiente de cobro"), h("th", { style: th }, "Sin pago"))),
+        h("thead", null, h("tr", null, h("th", { style: { ...th, textAlign: "left" } }, "Entrenador"), h("th", { style: th }, `Sesiones de ${nombreMes}`), h("th", { style: th }, "De meses anteriores"), h("th", { style: th }, "A pagar"), h("th", { style: th, title: "Parte que sale de cobros en efectivo" }, "En efectivo"), h("th", { style: th, title: "Transferencia, tarjeta, domiciliado y tarifas fijas" }, "Por banco"), h("th", { style: th }, "Pendiente de cobro"), h("th", { style: th }, "Sin pago"))),
         h("tbody", null,
-          pagos.map((x) => h("tr", { key: x.k }, h("td", { style: { ...tdL, fontWeight: 700 } }, h("span", { style: { display: "inline-flex", alignItems: "center", gap: 6 } }, h(Swatch, { color: P(x.k).color }), P(x.k).name)), h("td", { style: td }, eur2(x.r.totalMes)), h("td", { style: td }, x.r.totalAtras ? eur2(x.r.totalAtras) : "–"), h("td", { style: { ...td, fontWeight: 800 } }, eur2(x.r.total)), h("td", { style: { ...td, color: C_MUTED } }, x.r.pendientes.length ? `${x.r.pendientes.length} · ${eur2(x.pend)}` : "–"), h("td", { style: { ...td, color: x.r.sinBono.length ? C_WARN : void 0, fontWeight: x.r.sinBono.length ? 700 : 400 } }, x.r.sinBono.length || "–"))),
-          h("tr", null, h("td", { style: { ...tdT, textAlign: "left" } }, "Total"), h("td", { style: tdT }, eur2(pagos.reduce((a, x) => a + x.r.totalMes, 0))), h("td", { style: tdT }, eur2(pagos.reduce((a, x) => a + x.r.totalAtras, 0))), h("td", { style: tdT }, eur2(totalPagar)), h("td", { style: { ...tdT, color: C_MUTED } }, eur2(totalPend)), h("td", { style: tdT }, pagos.reduce((a, x) => a + x.r.sinBono.length, 0) || "–"))))),
+          pagos.map((x) => h("tr", { key: x.k }, h("td", { style: { ...tdL, fontWeight: 700 } }, h("span", { style: { display: "inline-flex", alignItems: "center", gap: 6 } }, h(Swatch, { color: P(x.k).color }), P(x.k).name)), h("td", { style: td }, eur2(x.r.totalMes)), h("td", { style: td }, x.r.totalAtras ? eur2(x.r.totalAtras) : "–"), h("td", { style: { ...td, fontWeight: 800 } }, eur2(x.r.total)), h("td", { style: { ...td, fontWeight: 700, color: C_GOOD } }, x.r.efectivo ? eur2(x.r.efectivo) : "–"), h("td", { style: td }, x.r.banco ? eur2(x.r.banco) : "–"), h("td", { style: { ...td, color: C_MUTED } }, x.r.pendientes.length ? `${x.r.pendientes.length} · ${eur2(x.pend)}` : "–"), h("td", { style: { ...td, color: x.r.sinBono.length ? C_WARN : void 0, fontWeight: x.r.sinBono.length ? 700 : 400 } }, x.r.sinBono.length || "–"))),
+          h("tr", null, h("td", { style: { ...tdT, textAlign: "left" } }, "Total"), h("td", { style: tdT }, eur2(pagos.reduce((a, x) => a + x.r.totalMes, 0))), h("td", { style: tdT }, eur2(pagos.reduce((a, x) => a + x.r.totalAtras, 0))), h("td", { style: tdT }, eur2(totalPagar)), h("td", { style: { ...tdT, color: C_GOOD } }, eur2(pagos.reduce((a, x) => a + x.r.efectivo, 0))), h("td", { style: tdT }, eur2(pagos.reduce((a, x) => a + x.r.banco, 0))), h("td", { style: { ...tdT, color: C_MUTED } }, eur2(totalPend)), h("td", { style: tdT }, pagos.reduce((a, x) => a + x.r.sinBono.length, 0) || "–"))))),
 
     seccion(`Clientes con pagos pendientes · ${eur2(totalDeuda)}`, deuda.length > 0 && botonCopiar("deuda", textoDeuda),
       h("p", { style: nota }, "Pagos que AimHarder tiene como pendientes y ya han vencido, de cualquier mes. En rojo, los de más de 30 días. Pulsa un cliente para ver sus pagos."),
