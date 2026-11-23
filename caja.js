@@ -309,5 +309,6 @@
       h("section", { style: box }, delMes.length === 0 ? h("p", { style: { fontSize: 13, color: MUTED, margin: 0 } }, "No hay cobros de la Caja en este mes.") : h("div", null, delMes.map(fila))));
   }
 
+  window.__cajaSb = sb; // la Caja integrada (caja-app.js) usa esta misma conexión y sesión
   window.CajaAxis = { useCaja, aplicar, CajaTab: CobrosTab };
 })();

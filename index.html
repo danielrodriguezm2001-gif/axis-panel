@@ -23,10 +23,13 @@
 
 <!-- Supabase (Caja de Axis: pagos en tiempo real) y su lógica; antes que panel.js, que la usa al pintar. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="caja.js?v=6"></script>
+<script src="caja.js?v=7"></script>
+<!-- La Caja completa dentro del panel (misma base de datos y sesión): estilos y lógica de la pestaña «Caja». -->
+<link rel="stylesheet" href="caja-app.css?v=1" />
+<script src="caja-app.js?v=1" data-embebida></script>
 
 <!-- El panel (horarios, sesiones, equipo...) -->
-<script src="panel.js?v=43"></script>
+<script src="panel.js?v=44"></script>
 
 <!-- Integración de Google Calendar: añade el widget flotante de "Conectar"
      y el autoenvío de invitaciones por coach. Va DESPUÉS de panel.js
