@@ -579,6 +579,8 @@ function productOf(conceptRaw, fallbackCat) {
   }
   if (t.includes("performance")) return { familia: "Grupos", nombre: "Performance Group", sesiones: num(/\((\d+)\s*sesion/) || 8, sesionesFijas: !!num(/\((\d+)\s*sesion/) };
   if (t.includes("valoraci") && area === "Nutrición") return { familia: "Nutrición", nombre: "Valoración inicial · Nutrición", sesiones: 1 };
+  // Valoración inicial dual (150 €, sin IVA): la dan dos entrenadores a la vez; en AimHarder son dos sesiones duplicadas.
+  if (t.includes("valoraci") && /\bdual\b/.test(t)) return { familia: "Valoración", nombre: "Valoración inicial dual", sesiones: 1, dual: true };
   if (t.includes("valoraci")) return area === "Psicología" ? { familia: "Psicología", nombre: "Valoración inicial · Psicología", sesiones: 1 } : { familia: "Valoración", nombre: "Valoración inicial", sesiones: 1 };
   // Pack trimestral: valoración inicial + entrega del pack nutricional + 2 seguimientos.
   if (t.includes("trimestral") && area === "Nutrición") return { familia: "Nutrición", nombre: "Pack trimestral · Nutrición", sesiones: 4 };
@@ -909,7 +911,7 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
       const conEP = lineas.some((l) => l.fam === "Entrenamiento personal");
       for (const l of lineas) {
         const n = Number(l.n);
-        lista.push({ pack: conEP, id: p.id, d: p.d || "", e: p.em || p.d || "", fam: l.fam, generic: !!l.generico && l.fam === "Entrenamiento personal", left: n, mes: null, uno: n === 1, unit: Number(l.valor) > 0 ? Number(l.valor) / n : unitLibre, origen: origenLabel({ nombre: p.co, sesiones: n }, l.fam), seller: vend, st: p.st });
+        lista.push({ dual: l.fam === "Valoración inicial" && /\bdual\b/.test(stripAccents(p.co || "")), pack: conEP, id: p.id, d: p.d || "", e: p.em || p.d || "", fam: l.fam, generic: !!l.generico && l.fam === "Entrenamiento personal", left: n, mes: null, uno: n === 1, unit: Number(l.valor) > 0 ? Number(l.valor) / n : unitLibre, origen: origenLabel({ nombre: p.co, sesiones: n }, l.fam), seller: vend, st: p.st });
       }
       credits.set(key, lista);
       continue;
@@ -947,6 +949,7 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
       fam,
       // Bono sin área ("sin especificar"): solo los de EP pueden cubrir fisio.
       generic: fam === "Entrenamiento personal" && !areaOf(stripAccents(p.co || "")),
+      dual: !!pr.dual,
       left: pr.sesiones,
       // Sesión suelta con mes en el concepto ("… 11/2026"): es para una sesión de
       // ese mes, así que no puede tapar el hueco de una sesión sin pagar de antes.
@@ -974,6 +977,12 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
   };
   const hechas = sessions.filter((s) => isDone(s, hoy, nowMin) && tipos.includes(sessionTypeOf(s.title))).sort((a, b) => ((a.date || "") + (a.start || "")).localeCompare((b.date || "") + (b.start || "")));
   const rows = [];
+  // Valoración inicial dual: AimHarder no deja asignar una sesión a dos entrenadores, así que se
+  // crean dos sesiones duplicadas (mismo cliente, día y hora). Para el panel es UNA sola sesión:
+  // gasta un único bono y cada entrenador se lleva la mitad de su valor (peso 0,5).
+  const dualVista = /* @__PURE__ */ new Map();
+  const dualSids = /* @__PURE__ */ new Set();
+  const solapa = (a, b) => toMin(a.start) < toMin(b.end) && toMin(b.start) < toMin(a.end);
   // 1.ª pasada: cada sesión se reserva la sesión suelta que su entrenador emitió
   // ESE MISMO DÍA (es su pago). Así una sesión anterior no se la queda.
   const reservado = /* @__PURE__ */ new Map();
@@ -1005,6 +1014,18 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
     for (const cl of clientes) {
       const list = credits.get(resolve(cl)) || [];
       const prefs = PREFS_CREDITO[tipo] || [];
+      if (tipo === "Valoración inicial") {
+        const previa = dualVista.get(resolve(cl) + "|" + s.date);
+        if (previa && previa.coach !== coach && solapa(previa.s, s)) {
+          // Segunda sesión de la dual: no gasta otro bono; reparte el valor a medias.
+          previa.row.value = previa.row.dualTotal / 2;
+          previa.row.peso = 0.5;
+          rows.push({ ...previa.row, sid: s.id, start: s.start, coach, peso: 0.5 });
+          dualSids.add(previa.s.id);
+          dualSids.add(s.id);
+          continue;
+        }
+      }
       let cr = reservado.get(s.id + "|" + cl) || null;
       if (cr) cr.left += 1;
       const mesS = (s.date || "").slice(0, 7);
@@ -1030,6 +1051,12 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
         if (cr.agrupado) cr.n += 1;
         if (!cr.ultimo || s.date > cr.ultimo) cr.ultimo = s.date;
         rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, cid: String(cr.id), value: cr.unit, origen: cr.origen, seller: cr.seller, pendiente: cr.st === "pen", cobro: cr.st === "fin" ? cr.d : null, sinBono: false, agrupado: cr.agrupado ? cr : null, cfam: cr.fam, cpack: !!cr.pack, cmet: metodoDe.get(String(cr.id)) || "" });
+        if (tipo === "Valoración inicial" && cr.dual) {
+          const fila = rows[rows.length - 1];
+          fila.dual = true;
+          fila.dualTotal = cr.unit;
+          dualVista.set(resolve(cl) + "|" + s.date, { row: fila, coach, s });
+        }
       } else {
         rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: 0, origen: "Sin bono", seller: null, sinBono: true });
       }
@@ -1044,6 +1071,7 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
   }
   // Estado final de cada bono (sesiones que quedan), para «Bonos por renovar».
   rows.creditos = [...credits.values()].flat();
+  rows.dualSids = dualSids;
   return rows;
 }
 function valorPorPersona(rows, prefix) {
@@ -1052,7 +1080,7 @@ function valorPorPersona(rows, prefix) {
   for (const r of rows) {
     if (!(r.date || "").startsWith(prefix)) continue;
     const st = get(r.coach);
-    st.n += 1;
+    st.n += r.peso || 1;
     st.value += r.value;
     if (r.pendiente) st.pendientes += 1;
     if (r.sinBono) {
@@ -1061,7 +1089,7 @@ function valorPorPersona(rows, prefix) {
       continue;
     }
     const o = st.origenes[r.origen] = st.origenes[r.origen] || { origen: r.origen, n: 0, value: 0 };
-    o.n += 1;
+    o.n += r.peso || 1;
     o.value += r.value;
     if (r.seller && r.seller !== r.coach) {
       st.deOtros.n += 1;
@@ -1091,6 +1119,8 @@ const ivaFila = (r, coach) => r.cfam === "Viaje" ? IVA_VIAJE : r.tipo === "Valor
 // El servicio de viaje siempre lleva IVA, aunque la sesión sea de fisio.
 const IVA_VIAJE = 0.21;
 const ivaDe = (tipo, coach) => tipo === "Fisioterapia" || tipo === "Nutrición" || (IVA_0_POR_COACH[coach] || []).includes(tipo) ? 0 : 0.21;
+// Número de sesiones (puede ser 0,5 en la valoración dual).
+const fmtN = (n) => Number.isInteger(n) ? String(n) : n.toFixed(1).replace(".", ",");
 const PCT_100 = { "Entrenamiento personal": 1, "Fisioterapia": 1, "Performance Group": 1, "Valoración inicial": 1 };
 const PAGO_COACH = {
   marc: { pct: PCT_100, notas: ["The Axis Club no suma en su pago."] },
@@ -1127,6 +1157,7 @@ const LEYENDA_COMUN = [
   "Solo cuentan las sesiones ya impartidas, según el entrenador asignado en AimHarder; cada cliente de la sesión gasta una sesión de su bono, por orden de compra.",
   "Cada sesión se paga el mes en que Axis cobra el bono del que sale (o el mes de la sesión, si el bono ya estaba cobrado). Las de bonos pendientes aparecen aparte y se pagan cuando se cobren.",
   "Viaje: servicio único que cubre una sesión de EP o de fisioterapia; siempre con IVA del 21 %, también si es fisio.",
+  "Valoración inicial dual (150 €, sin IVA): la dan dos entrenadores a la vez. AimHarder la guarda como dos sesiones duplicadas (una por entrenador), pero el panel la cuenta como UNA sola sesión de un único bono: cada entrenador se lleva el 50 % (75 €), también Sergio.",
   "Pack «Iniciación - Mes 1»: asesoramiento (ASS) de 100 € + 3 sesiones de EP a 60 €, según lo que indique su concepto.",
   "Las sesiones sin un bono pagado que las cubra no suman (salen en naranja para revisar el cobro)."
 ];
@@ -1155,7 +1186,12 @@ function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
     if (pct == null) continue;
     const mesSesion = (r.date || "").slice(0, 7);
     let key = r.tipo, concepto = r.tipo;
-    if (r.tipo === "Valoración inicial") {
+    if (r.tipo === "Valoración inicial" && r.dual && r.peso === 0.5) {
+      // Valoración inicial dual: 50 % del valor de la sesión para cada entrenador (también Sergio).
+      pct = 1;
+      key = "val|dual";
+      concepto = "Valoración inicial dual (mitad de la sesión)";
+    } else if (r.tipo === "Valoración inicial") {
       const conOtro = cfg.valoracionCompartida != null && compartida(r.sid);
       if (conOtro) pct = cfg.valoracionCompartida;
       key = conOtro ? "val|otro" : "val|solo";
@@ -1176,7 +1212,7 @@ function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
     if (!mesPago.startsWith(prefix)) continue;
     const g = mesSesion < mesPago ? "atras" : "mes";
     const l = linea(g, key, concepto, pctTxt(pct));
-    l.n += 1;
+    l.n += r.peso || 1;
     l.base += base;
     l.pago += pago;
     // Lo que el cliente pagó en efectivo se le paga al entrenador en efectivo.
@@ -1193,7 +1229,7 @@ function pagoCoach(k, ledger, sessions, coaches, prefix, hoy, nowMin) {
     l.pago += tramo.eur;
     detalle.push({ date: s.date, start: s.start, tipo: "The Axis Club", quien: `${n} ${n === 1 ? "persona" : "personas"}`, origen: "Tarifa fija", base: null, pago: tramo.eur, cobro: null, sinBono: false, atras: false, club: true });
   }
-  const orden = ["Entrenamiento personal", "Fisioterapia", "Nutrición", "Performance Group", "val|solo", "val|otro", ...(cfg.axisClub || []).map((t) => "club|" + t.label)];
+  const orden = ["Entrenamiento personal", "Fisioterapia", "Nutrición", "Performance Group", "val|solo", "val|otro", "val|dual", ...(cfg.axisClub || []).map((t) => "club|" + t.label)];
   const lista = (g) => orden.filter((o) => grupos[g].has(o)).map((o) => grupos[g].get(o));
   const suma = (xs, f) => xs.reduce((a, x) => a + x[f], 0);
   const porFecha = (a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || ""));
@@ -1232,7 +1268,7 @@ function PagoCoach({ k, p, ledger, sessions, coaches, periodo, month, year, etiq
   const h = React.createElement;
   const filasGrupo = (g, lineas, subtotal) => lineas.length === 0 ? null : h(React.Fragment, { key: g },
     h("tr", null, h("td", { style: tdG, colSpan: 4 }, titulos[g]), h("td", { style: { ...tdG, textAlign: "right" } }, eur2(subtotal))),
-    lineas.map((l) => h("tr", { key: g + l.concepto }, h("td", { style: { ...tdL, paddingLeft: 18 } }, l.concepto), h("td", { style: { ...td, fontWeight: 700 } }, l.n), h("td", { style: td }, l.concepto.startsWith("The Axis Club") ? "–" : eur2(l.base)), h("td", { style: td }, l.regla), h("td", { style: { ...td, fontWeight: 700 } }, eur2(l.pago)))));
+    lineas.map((l) => h("tr", { key: g + l.concepto }, h("td", { style: { ...tdL, paddingLeft: 18 } }, l.concepto), h("td", { style: { ...td, fontWeight: 700 } }, fmtN(l.n)), h("td", { style: td }, l.concepto.startsWith("The Axis Club") ? "–" : eur2(l.base)), h("td", { style: td }, l.regla), h("td", { style: { ...td, fontWeight: 700 } }, eur2(l.pago)))));
   const pend = { n: r.pendientes.length, pago: r.pendientes.reduce((a, x) => a + x.pago, 0) };
   const pendPorCliente = Object.entries(r.pendientes.reduce((m, x) => ((m[x.quien] = m[x.quien] || []).push(x), m), {})).sort((a, b) => b[1].length - a[1].length);
   const sinB = [...new Set(r.sinBono.map((d) => d.quien))];
@@ -1253,7 +1289,7 @@ function PagoCoach({ k, p, ledger, sessions, coaches, periodo, month, year, etiq
       h("tbody", null,
         filasGrupo("mes", r.mes, r.totalMes),
         filasGrupo("atras", r.atras, r.totalAtras),
-        h("tr", null, h("td", { style: { ...tdT, textAlign: "left" } }, "Total a pagar"), h("td", { style: tdT }, [...r.mes, ...r.atras].reduce((a, l) => a + l.n, 0)), h("td", { style: tdT }), h("td", { style: tdT }), h("td", { style: tdT }, eur2(r.total))))),
+        h("tr", null, h("td", { style: { ...tdT, textAlign: "left" } }, "Total a pagar"), h("td", { style: tdT }, fmtN([...r.mes, ...r.atras].reduce((a, l) => a + l.n, 0))), h("td", { style: tdT }), h("td", { style: tdT }), h("td", { style: tdT }, eur2(r.total))))),
     pend.n > 0 && h("div", { style: { marginTop: 14, padding: "10px 14px", border: `1px dashed ${C_LINE}`, borderRadius: 8, fontSize: 12 } },
       h("div", { style: { fontWeight: 700, fontSize: 13 } }, "Pendiente de cobro (no se paga todavía): ", pend.n, " ", pend.n === 1 ? "sesión" : "sesiones", " · ", eur2(pend.pago)),
       h("div", { style: { color: C_MUTED, margin: "2px 0 6px" } }, "Sesiones ya impartidas", periodo === "mes" ? ` hasta ${nombreMes}` : "", " de bonos que el cliente aún no ha pagado. Se pagarán el mes en que se cobren."),
@@ -2331,20 +2367,24 @@ function AxisPanel() {
     const cats = /* @__PURE__ */ new Set();
     const matrix = {};
     const totalsByCoach = {};
+    let total = 0;
+    const dualSids = ledgerTodo.dualSids || /* @__PURE__ */ new Set();
     for (const s of monthSessions) {
       const cat = categorize(s.title);
       cats.add(cat);
       const col = coaches.find((c) => c.id === s.coachId) ? s.coachId : "__none__";
       matrix[cat] = matrix[cat] || {};
-      matrix[cat][col] = (matrix[cat][col] || 0) + 1;
-      totalsByCoach[col] = (totalsByCoach[col] || 0) + 1;
+      const w = dualSids.has(s.id) ? 0.5 : 1;
+      matrix[cat][col] = (matrix[cat][col] || 0) + w;
+      totalsByCoach[col] = (totalsByCoach[col] || 0) + w;
+      total += w;
     }
     const orderedCats = [
       ...PRODUCT_ORDER.filter((c) => cats.has(c)),
       ...[...cats].filter((c) => !PRODUCT_ORDER.includes(c)).sort()
     ];
-    return { total: monthSessions.length, colIds, matrix, totalsByCoach, orderedCats, hasUnassigned };
-  }, [sessions, month, coaches]);
+    return { total, colIds, matrix, totalsByCoach, orderedCats, hasUnassigned };
+  }, [sessions, month, coaches, ledgerTodo]);
   const selectedIds = Object.keys(selected).filter((k) => selected[k]);
   const selectedSessions = daySessions.filter((s) => selectedIds.includes(s.id));
   function handleSend(toSend) {
