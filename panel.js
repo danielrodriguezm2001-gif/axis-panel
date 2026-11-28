@@ -983,6 +983,7 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
   const dualVista = /* @__PURE__ */ new Map();
   const dualSids = /* @__PURE__ */ new Set();
   const solapa = (a, b) => toMin(a.start) < toMin(b.end) && toMin(b.start) < toMin(a.end);
+  const porSid = new Map(sessions.map((x) => [x.id, x]));
   // 1.ª pasada: cada sesión se reserva la sesión suelta que su entrenador emitió
   // ESE MISMO DÍA (es su pago). Así una sesión anterior no se la queda.
   const reservado = /* @__PURE__ */ new Map();
@@ -1056,6 +1057,17 @@ function buildSessionLedger(payments, sessions, coaches, hoy, nowMin, tipos = SE
           fila.dual = true;
           fila.dualTotal = cr.unit;
           dualVista.set(resolve(cl) + "|" + s.date, { row: fila, coach, s });
+          // La otra mitad puede ir ANTES (p. ej. el pago lo creó el entrenador de la segunda
+          // cita y su sesión se reservó el bono): si quedó «sin bono», es la misma sesión.
+          const i = rows.findIndex((r) => r.sinBono && r.tipo === "Valoración inicial" && r.date === s.date && r.coach !== coach && resolve(r.client) === resolve(cl) && porSid.has(r.sid) && solapa(porSid.get(r.sid), s));
+          if (i >= 0) {
+            fila.value = cr.unit / 2;
+            fila.peso = 0.5;
+            rows[i] = { ...fila, sid: rows[i].sid, start: rows[i].start, coach: rows[i].coach };
+            dualSids.add(rows[i].sid);
+            dualSids.add(s.id);
+            dualVista.delete(resolve(cl) + "|" + s.date);
+          }
         }
       } else {
         rows.push({ date: s.date, start: s.start, sid: s.id, coach, tipo, client: cl, value: 0, origen: "Sin bono", seller: null, sinBono: true });
